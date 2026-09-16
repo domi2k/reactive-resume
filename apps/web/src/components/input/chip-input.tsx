@@ -24,7 +24,6 @@ import { cn } from "@reactive-resume/utils/style";
 import { useControlledState } from "@/hooks/use-controlled-state";
 
 const RETURN_KEY = "Enter";
-const COMMA_KEY = ",";
 const EMPTY_CHIPS: string[] = [];
 
 type ChipItemProps = {
@@ -288,35 +287,9 @@ export function ChipInput({
 		[chips, handleReorder],
 	);
 
-	const handleInputChange = React.useCallback(
-		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const newValue = e.target.value;
-
-			if (editingIndex !== null) {
-				if (newValue.includes(",")) {
-					updateChip(editingIndex, newValue.replace(",", ""));
-					setEditingIndex(null);
-					setInput("");
-				} else {
-					setInput(newValue);
-				}
-				return;
-			}
-
-			if (newValue.includes(",")) {
-				const parts = newValue.split(",");
-				addChips(parts.slice(0, -1));
-				setInput(parts[parts.length - 1]);
-			} else {
-				setInput(newValue);
-			}
-		},
-		[addChips, editingIndex, updateChip],
-	);
-
 	const handleKeyDown = React.useCallback(
 		(e: React.KeyboardEvent<HTMLInputElement>) => {
-			if (e.key === "Enter" || e.key === ",") {
+			if (e.key === "Enter" && !e.nativeEvent.isComposing) {
 				e.preventDefault();
 
 				if (editingIndex !== null) {
@@ -390,7 +363,7 @@ export function ChipInput({
 								aria-invalid={invalid}
 								placeholder={isEditingKeyword ? t`Editing keyword...` : t`Add a keyword...`}
 								onKeyDown={handleKeyDown}
-								onChange={handleInputChange}
+								onChange={(event) => setInput(event.target.value)}
 								className="h-9 flex-1 border-none p-0 focus-visible:border-none focus-visible:ring-0 dark:bg-transparent"
 							/>
 							<AnimatePresence>
@@ -424,7 +397,7 @@ export function ChipInput({
 			{!hideDescription && (
 				<p className="text-muted-foreground text-xs">
 					<Trans>
-						Press <Kbd>{RETURN_KEY}</Kbd> or <Kbd>{COMMA_KEY}</Kbd> to add or save the current keyword.
+						Press <Kbd>{RETURN_KEY}</Kbd> to add or save the current keyword.
 					</Trans>
 				</p>
 			)}

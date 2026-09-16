@@ -121,7 +121,6 @@ type ItemTitleProps = {
 	website: ItemWebsite;
 	field: string;
 	bold?: boolean;
-	suffix?: string;
 };
 
 type ItemWebsiteLinkProps = {
@@ -697,24 +696,22 @@ const SectionItemHeader = ({ children }: SectionItemHeaderProps) => {
 	);
 };
 
-const ItemTitle = ({ children, website, field, bold = true, suffix = "" }: ItemTitleProps) => {
+const ItemTitle = ({ children, website, field, bold = true }: ItemTitleProps) => {
 	const inlineWebsiteIcon = useTemplateFeature("inlineWebsiteIcon");
 	const inlineWebsiteUrl = inlineWebsiteIcon ? website.url.trim() : getInlineItemWebsiteUrl(website);
-	const textStyle = useTemplateStyle("text");
 	const parentKey = useSemanticNodeKey();
-	const resolvedTitle = useResolvedNode(parentKey ? semanticNodeKeys.field(parentKey, field) : undefined);
+	const iconNodeKey = parentKey ? semanticNodeKeys.icon(parentKey, "external-link") : undefined;
+	const resolvedIcon = useResolvedNode(iconNodeKey);
 	const { metadata } = useRender();
 	const style = use(ItemHeaderRowNowrapContext) ? nowrapItemTitleStyle : wrappingItemTitleStyle;
 	const titleStyle = inlineWebsiteIcon ? { flexShrink: 1, minWidth: 0 } : style;
 	const title = bold ? (
 		<Bold style={titleStyle} semanticField={field}>
 			{children}
-			{!inlineWebsiteUrl && suffix}
 		</Bold>
 	) : (
 		<Text style={titleStyle} semanticField={field}>
 			{children}
-			{!inlineWebsiteUrl && suffix}
 		</Text>
 	);
 
@@ -735,12 +732,11 @@ const ItemTitle = ({ children, website, field, bold = true, suffix = "" }: ItemT
 			{inlineWebsiteIcon && (
 				<Icon
 					name="arrow-square-out"
-					size={metadata.typography.body.fontSize}
-					color={mergeStyles(textStyle, resolvedTitle.style).color ?? "#000000"}
-					nodeKey={parentKey ? semanticNodeKeys.icon(parentKey, "external-link") : undefined}
+					style={{ fontSize: metadata.typography.body.fontSize * 0.75, marginLeft: 2 }}
+					color={resolvedIcon.style?.color ?? "#888888"}
+					nodeKey={iconNodeKey}
 				/>
 			)}
-			{suffix && <Text>{suffix}</Text>}
 		</Link>
 	);
 };
@@ -977,19 +973,36 @@ const ExperienceSection = ({ sectionId = "experience", sectionData }: ItemSectio
 									<SectionItemHeader>
 										{positionFirst && item.roles.length === 0 ? (
 											<>
-												<View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline" }}>
-													<ItemTitle
-														field={hasPosition ? "position" : "company"}
-														website={item.website}
-														suffix={hasPosition && hasSplitRowText(item.company) ? ", " : ""}
+												{(hasPosition || hasSplitRowText(item.company) || hasSplitRowText(item.period)) && (
+													<View
+														style={composeStyles(splitRowStyle, {
+															flexDirection: data.rtl ? "row-reverse" : "row",
+															flexWrap: "nowrap",
+														})}
 													>
-														{hasPosition ? item.position : item.company}
-													</ItemTitle>
-													{hasPosition && hasSplitRowText(item.company) && (
-														<Text semanticField="company">{item.company}</Text>
-													)}
-												</View>
-												<Text semanticField="period">{item.period}</Text>
+														<View style={nowrapItemTitleStyle}>
+															{(hasPosition || hasSplitRowText(item.company)) && (
+																<ItemTitle field={hasPosition ? "position" : "company"} website={item.website}>
+																	{hasPosition ? item.position : item.company}
+																</ItemTitle>
+															)}
+														</View>
+														{hasSplitRowText(item.period) && (
+															<Text
+																semanticField="period"
+																style={composeStyles(alignEndStyle, {
+																	flexShrink: 0,
+																	textAlign: data.rtl ? "left" : "right",
+																})}
+															>
+																{item.period}
+															</Text>
+														)}
+													</View>
+												)}
+												{hasPosition && hasSplitRowText(item.company) && (
+													<Text semanticField="company">{item.company}</Text>
+												)}
 											</>
 										) : inlineItemHeader ? (
 											renderInlineHeader()

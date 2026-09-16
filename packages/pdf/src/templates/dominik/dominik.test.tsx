@@ -132,9 +132,14 @@ describe("Dominik", () => {
 		expect(
 			nodes.some(
 				(node) =>
-					node.type === "LINK" && text(node) === "Team Leader, " && hosts(node).some((child) => child.type === "SVG"),
+					node.type === "LINK" && text(node) === "Team Leader" && hosts(node).some((child) => child.type === "SVG"),
 			),
 		).toBe(true);
+		const header = required(
+			nodes.find((node) => node.type === "VIEW" && text(node) === "Team LeaderMay 2026Hackology"),
+		);
+		expect(header.children?.map(text)).toEqual(["Team LeaderMay 2026", "Hackology"]);
+		expect(header.children?.[0]?.children?.map(text)).toEqual(["Team Leader", "May 2026"]);
 		const bytes = await renderPdf(data);
 		expect(bytes.byteLength).toBeGreaterThan(1000);
 	});

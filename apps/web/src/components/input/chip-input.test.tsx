@@ -37,15 +37,25 @@ describe("ChipInput", () => {
 		expect(onChange).toHaveBeenCalledWith(["a", "b"]);
 	});
 
-	it("adds a chip on comma keypress", () => {
+	it("keeps typed and pasted commas literal until Enter, including edits", () => {
 		const onChange = vi.fn();
-		renderInput({ defaultValue: [], onChange });
-
-		const input = document.querySelector("input") as HTMLInputElement;
-		fireEvent.change(input, { target: { value: "new-tag" } });
-		fireEvent.keyDown(input, { key: "," });
-
-		expect(onChange).toHaveBeenCalledWith(["new-tag"]);
+		renderInput({ onChange });
+		const input = screen.getByRole("textbox");
+		fireEvent.change(input, { target: { value: "SQL (PostgreSQL" } });
+		expect(fireEvent.keyDown(input, { key: "," })).toBe(true);
+		fireEvent.change(input, { target: { value: "SQL (PostgreSQL, SQLite)" } });
+		expect(onChange).not.toHaveBeenCalled();
+		fireEvent.keyDown(input, { key: "Enter" });
+		expect(onChange).toHaveBeenLastCalledWith(["SQL (PostgreSQL, SQLite)"]);
+		fireEvent.change(input, { target: { value: "uv, ruff, ty, jupyter notebook" } });
+		expect(onChange).toHaveBeenCalledTimes(1);
+		fireEvent.keyDown(input, { key: "Enter" });
+		expect(onChange).toHaveBeenLastCalledWith(["SQL (PostgreSQL, SQLite)", "uv, ruff, ty, jupyter notebook"]);
+		fireEvent.click(screen.getByRole("button", { name: "Edit SQL (PostgreSQL, SQLite)" }));
+		fireEvent.change(input, { target: { value: "SQL (PostgreSQL, SQLite, MySQL)" } });
+		expect(onChange).toHaveBeenCalledTimes(2);
+		fireEvent.keyDown(input, { key: "Enter" });
+		expect(onChange).toHaveBeenLastCalledWith(["SQL (PostgreSQL, SQLite, MySQL)", "uv, ruff, ty, jupyter notebook"]);
 	});
 
 	it("does not add a duplicate chip", () => {
