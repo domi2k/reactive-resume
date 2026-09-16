@@ -53,6 +53,13 @@ export const templates = {
 		tags: ["Two-column", "Accent colors", "Clean typography", "Business analyst", "Operations"],
 		sidebarPosition: "left",
 	},
+	dominik: {
+		name: "Dominik",
+		description: msg`Two-column with a full-height photo sidebar and filled contact icons.`,
+		imageUrl: "/templates/jpg/dominik.jpg",
+		tags: ["Two-column", "Photo sidebar", "Filled icons"],
+		sidebarPosition: "left",
+	},
 	glalie: {
 		name: "Glalie",
 		description: msg`Two-column, minimal with light gray sidebar and subtle icons; professional and understated for legal, finance, or executive roles.`,

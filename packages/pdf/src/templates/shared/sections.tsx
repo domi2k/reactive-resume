@@ -1027,9 +1027,59 @@ const EducationItemContent = ({ item, header }: EducationItemContentProps) => {
 	return <>{projectRenderedChildren(renderedChildKeys, entries)}</>;
 };
 
+type EducationPeriodHeaderProps = {
+	item: EducationItem;
+	splitRowStyle: StyleInput;
+	alignEndStyle: StyleInput;
+};
+
+const EducationPeriodHeader = ({ item, splitRowStyle, alignEndStyle }: EducationPeriodHeaderProps) => {
+	const { rtl } = useRender();
+	const headerNodeKey = useSemanticNodeKey();
+	const titleNodeKey = semanticTemplatePartNodeKey(headerNodeKey, "education-header-row", "education-title");
+
+	return (
+		<>
+			<SemanticTemplatePartView
+				partKeys={["education-header-row"]}
+				style={composeStyles(splitRowStyle, { flexDirection: rtl ? "row-reverse" : "row", flexWrap: "nowrap" })}
+			>
+				<Text nodeKey={titleNodeKey} style={nowrapItemTitleStyle}>
+					<ItemTitle field="school" website={item.website}>
+						{item.school}
+					</ItemTitle>
+					{hasSplitRowText(item.area) && (
+						<Text semanticField="area">
+							{item.school ? ", " : ""}
+							{item.area}
+						</Text>
+					)}
+					{hasSplitRowText(item.degree) && (
+						<Text semanticField="degree">
+							{item.school || item.area ? " · " : ""}
+							{item.degree}
+						</Text>
+					)}
+				</Text>
+				{hasSplitRowText(item.period) && (
+					<Text
+						semanticField="period"
+						style={composeStyles(alignEndStyle, { flexShrink: 0, maxWidth: "45%", textAlign: rtl ? "left" : "right" })}
+					>
+						{item.period}
+					</Text>
+				)}
+			</SemanticTemplatePartView>
+			{hasSplitRowText(item.location) && <Text semanticField="location">{item.location}</Text>}
+			{hasSplitRowText(item.grade) && <Text semanticField="grade">{item.grade}</Text>}
+		</>
+	);
+};
+
 const EducationSection = ({ sectionId = "education", sectionData }: ItemSectionProps<EducationItem> = {}) => {
 	const data = useRender();
 	const education = sectionData ?? data.sections.education;
+	const educationPeriodInHeader = useTemplateFeature("educationPeriodInHeader");
 	const items = getVisibleItems(education, "education");
 	const splitRowStyle = useSectionSplitRowStyle();
 	const alignEndStyle = useTemplateStyle("alignEnd");
@@ -1123,7 +1173,15 @@ const EducationSection = ({ sectionId = "education", sectionData }: ItemSectionP
 							<EducationItemContent
 								item={item}
 								header={
-									<SectionItemHeader>{inlineItemHeader ? renderInlineHeader() : renderSplitHeader()}</SectionItemHeader>
+									<SectionItemHeader>
+										{educationPeriodInHeader ? (
+											<EducationPeriodHeader item={item} splitRowStyle={splitRowStyle} alignEndStyle={alignEndStyle} />
+										) : inlineItemHeader ? (
+											renderInlineHeader()
+										) : (
+											renderSplitHeader()
+										)}
+									</SectionItemHeader>
 								}
 							/>
 						</SectionItem>

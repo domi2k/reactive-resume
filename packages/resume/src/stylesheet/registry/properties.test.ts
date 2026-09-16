@@ -262,7 +262,12 @@ const expectedPropertyGroups = [
 	{ names: ["text-transform"], appliesTo: textAndLinkNodes, inheritable: true },
 	{ names: ["vertical-align"], appliesTo: textAndLinkNodes, inheritable: false },
 	{
-		names: ["object-fit", "object-position", "-resume-shadow-color", "-resume-shadow-width"],
+		names: ["object-fit", "object-position"],
+		appliesTo: ["picture", "template-part"],
+		inheritable: false,
+	},
+	{
+		names: ["-resume-shadow-color", "-resume-shadow-width"],
 		appliesTo: ["picture"],
 		inheritable: false,
 	},

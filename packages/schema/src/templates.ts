@@ -6,6 +6,7 @@ export const templateSchema = z.enum([
 	"chikorita",
 	"ditgar",
 	"ditto",
+	"dominik",
 	"gengar",
 	"glalie",
 	"kakuna",

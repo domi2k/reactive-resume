@@ -13,6 +13,7 @@ describe("templates metadata", () => {
 				"chikorita",
 				"ditgar",
 				"ditto",
+				"dominik",
 				"gengar",
 				"glalie",
 				"kakuna",

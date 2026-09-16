@@ -266,7 +266,11 @@ const properties = {
 	...entries(["text-overflow"], { category: "text", inheritable: false, appliesTo: textAndLinkNodes }),
 	...entries(["text-transform"], { category: "text", inheritable: true, appliesTo: textAndLinkNodes }),
 	...entries(["vertical-align"], { category: "text", inheritable: false, appliesTo: textAndLinkNodes }),
-	...entries(["object-fit", "object-position"], { category: "image", inheritable: false, appliesTo: ["picture"] }),
+	...entries(["object-fit", "object-position"], {
+		category: "image",
+		inheritable: false,
+		appliesTo: ["picture", "template-part"],
+	}),
 	...entries(["-resume-shadow-color", "-resume-shadow-width"], {
 		category: "image",
 		inheritable: false,

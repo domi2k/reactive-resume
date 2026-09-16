@@ -572,6 +572,7 @@ const buildHeader = (
 	pageKey: string,
 	placement: TemplateSemanticPlacement,
 	summary?: SemanticNode,
+	showPicture = true,
 ): SemanticNode => {
 	const regionKey = semanticNodeKeys.region(pageKey, "header");
 	const headerKey = semanticNodeKeys.header(regionKey);
@@ -614,7 +615,7 @@ const buildHeader = (
 		kind: "header",
 		attributes: { region: "header" },
 		children: [
-			...(hasTemplatePicture(data.picture)
+			...(showPicture && hasTemplatePicture(data.picture)
 				? [
 						semanticNode({
 							key: semanticNodeKeys.headerPart(headerKey, "picture"),
@@ -907,7 +908,7 @@ const addCombinedTextHosts = (
 			children = [...wrapCombinedFields(node.key, children, ["location"], "experience-location")];
 			children = [...wrapCombinedFields(node.key, children, ["period"], "experience-period")];
 		}
-		if (currentSectionType === "education") {
+		if (currentSectionType === "education" && !getTemplateSemanticManifest(template).educationPeriodInHeader) {
 			children = [...wrapCombinedFields(node.key, children, ["degree", "grade"], "education-degree-grade")];
 			children = [...wrapCombinedFields(node.key, children, ["location", "period"], "education-location-period")];
 		}
@@ -951,7 +952,7 @@ export function buildSemanticTree({
 						featured: true,
 					})
 				: undefined;
-			return [buildHeader(data, pageKey, manifest.header.placement, summary)];
+			return [buildHeader(data, pageKey, manifest.header.placement, summary, manifest.header.picture !== false)];
 		}
 
 		if (region.name === "featured") {

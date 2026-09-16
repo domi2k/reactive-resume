@@ -8,6 +8,7 @@ import { bronzorSemanticManifest } from "../templates/bronzor/semantic";
 import { chikoritaSemanticManifest } from "../templates/chikorita/semantic";
 import { ditgarSemanticManifest } from "../templates/ditgar/semantic";
 import { dittoSemanticManifest } from "../templates/ditto/semantic";
+import { dominikSemanticManifest } from "../templates/dominik/semantic";
 import { gengarSemanticManifest } from "../templates/gengar/semantic";
 import { glalieSemanticManifest } from "../templates/glalie/semantic";
 import { kakunaSemanticManifest } from "../templates/kakuna/semantic";
@@ -122,10 +123,12 @@ type TemplateSemanticCanonicalBinding = {
 export type TemplateSemanticManifest = {
 	template: Template;
 	skillLevelAfterName?: boolean;
+	educationPeriodInHeader?: boolean;
 	regions: readonly TemplateSemanticRegion[];
 	header: {
 		region: "header";
 		placement: TemplateSemanticPlacement;
+		picture?: false;
 	};
 	specialSummary: TemplateSemanticSpecialSummary | null;
 	parts: readonly TemplateSemanticPart[];
@@ -307,6 +310,7 @@ const TEMPLATE_SEMANTIC_MANIFESTS = {
 	chikorita: chikoritaSemanticManifest,
 	ditgar: ditgarSemanticManifest,
 	ditto: dittoSemanticManifest,
+	dominik: dominikSemanticManifest,
 	gengar: gengarSemanticManifest,
 	glalie: glalieSemanticManifest,
 	kakuna: kakunaSemanticManifest,

@@ -37,7 +37,66 @@ const EXPECTED_ITEM_HEADER_ROW = {
 	},
 } as const;
 
+const EXPECTED_DOMINIK_PARTS = [
+	{ ...EXPECTED_ITEM_HEADER_ROW["item-header-row"], name: "item-header-row" },
+	{
+		name: "education-header-row",
+		key: "education-header-row",
+		owner: { kind: "item-header", key: "item-header", sectionTypes: ["education"] },
+		binding: { type: "primitive", primitive: "View", source: "existing" },
+		route: {
+			parent: "owner",
+			at: "start",
+			take: [
+				{ kind: "field", name: "school", sectionTypes: ["education"] },
+				{ kind: "field", name: "area", sectionTypes: ["education"] },
+				{ kind: "field", name: "degree", sectionTypes: ["education"] },
+				{ kind: "field", name: "period", sectionTypes: ["education"] },
+				{ kind: "link", sectionTypes: ["education"] },
+			],
+		},
+	},
+	{
+		name: "education-title",
+		key: "education-title",
+		owner: { kind: "item-header", key: "item-header", sectionTypes: ["education"] },
+		binding: { type: "primitive", primitive: "Text", source: "existing" },
+		route: {
+			parent: "education-header-row",
+			at: "start",
+			take: [
+				{ kind: "field", name: "school" },
+				{ kind: "field", name: "area" },
+				{ kind: "field", name: "degree" },
+				{ kind: "link" },
+			],
+		},
+	},
+	{
+		name: "sidebar-picture",
+		key: "sidebar-picture",
+		owner: { kind: "region", key: "sidebar" },
+		binding: { type: "primitive", primitive: "Image", source: "existing" },
+		route: { parent: "owner", at: "start" },
+	},
+	{
+		name: "sidebar-overlay",
+		key: "sidebar-overlay",
+		owner: { kind: "region", key: "sidebar" },
+		binding: { type: "primitive", primitive: "View", source: "existing" },
+		route: { parent: "owner", at: "start" },
+	},
+	{
+		name: "sidebar-content",
+		key: "sidebar-content",
+		owner: { kind: "region", key: "sidebar" },
+		binding: { type: "primitive", primitive: "View", source: "existing" },
+		route: { parent: "owner", at: "end", take: [{ kind: "section" }] },
+	},
+] as const;
+
 const EXPECTED_PARTS = {
+	dominik: Object.fromEntries(EXPECTED_DOMINIK_PARTS.map(({ name, ...part }) => [name, part])),
 	azurill: {
 		...EXPECTED_ITEM_HEADER_ROW,
 		"timeline-line": {
@@ -319,6 +378,15 @@ const EXPECTED_PARTS = {
 } as const satisfies Readonly<Record<Template, Readonly<Record<string, object>>>>;
 
 const EXPECTED_LAYOUT = {
+	dominik: {
+		regions: [
+			{ name: "header", placement: "sidebar", origins: [] },
+			{ name: "sidebar", placement: "sidebar", origins: ["sidebar"] },
+			{ name: "main", placement: "main", origins: ["main"] },
+		],
+		header: { region: "header", placement: "sidebar", picture: false },
+		specialSummary: null,
+	},
 	azurill: {
 		regions: [
 			{ name: "header", placement: "main", origins: [] },
@@ -733,7 +801,28 @@ describe("template semantic manifests", () => {
 	});
 
 	it.each(templateSchema.options)("%s builds its manifest-backed tree without key collisions", (template) => {
-		const tree = buildFixtureTree(template);
+		const data = buildFixture();
+		data.sections.education.items = [
+			{
+				id: "education/1",
+				hidden: false,
+				school: "University",
+				area: "Physics",
+				degree: "BSc",
+				grade: "",
+				location: "Krakow",
+				period: "2023",
+				description: "",
+				website: { url: "", label: "", inlineLink: false },
+			},
+		];
+		const tree = buildSemanticTree({
+			data,
+			template,
+			page: { fullWidth: false, main: ["experience", "projects", "education", "summary"], sidebar: ["skills"] },
+			pageNumber: 1,
+			showHeader: true,
+		});
 		const nodes = flattenTree(tree);
 		const partNames = new Set(
 			findNodes(tree, (node) => node.kind === "template-part").map((node) => node.attributes.name),
@@ -849,6 +938,8 @@ describe("template semantic manifests", () => {
 				"contact-row-primary",
 				"contact-row-secondary",
 				"education-grade-row",
+				"education-header-row",
+				"education-title",
 				"featured-summary",
 				"header-band",
 				"header-body",
@@ -862,6 +953,9 @@ describe("template semantic manifests", () => {
 				"item-header-row",
 				"picture-anchor",
 				"sidebar-background",
+				"sidebar-content",
+				"sidebar-overlay",
+				"sidebar-picture",
 				"timeline-content",
 				"timeline-dot",
 				"timeline-line",
@@ -876,6 +970,9 @@ describe("template semantic manifests", () => {
 				"contact-row-primary:contact-item",
 				"contact-row-secondary:contact-item",
 				"education-grade-row:combined-text",
+				"education-header-row:field",
+				"education-header-row:template-part",
+				"education-title:field",
 				"featured-summary:section",
 				"header-band:headline",
 				"header-band:name",

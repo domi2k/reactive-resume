@@ -75,6 +75,7 @@ const TEMPLATE_CONFIGS: Record<Template, TemplateConfig> = {
 	ditgar: { sidebarSide: "left", sidebarBackground: "tint", headerPosition: "sidebar-only" },
 	ditto: { sidebarSide: "left", sidebarBackground: "none", headerPosition: "full-width" },
 	gengar: { sidebarSide: "left", sidebarBackground: "tint", headerPosition: "sidebar-only" },
+	dominik: { sidebarSide: "left", sidebarBackground: "tint", headerPosition: "sidebar-only" },
 	glalie: { sidebarSide: "left", sidebarBackground: "tint", headerPosition: "sidebar-only" },
 	kakuna: { sidebarSide: "right", sidebarBackground: "none", headerPosition: "full-width" },
 	lapras: { sidebarSide: "right", sidebarBackground: "none", headerPosition: "full-width" },
