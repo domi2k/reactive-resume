@@ -121,6 +121,7 @@ type ItemTitleProps = {
 	website: ItemWebsite;
 	field: string;
 	bold?: boolean;
+	suffix?: string;
 };
 
 type ItemWebsiteLinkProps = {
@@ -696,29 +697,57 @@ const SectionItemHeader = ({ children }: SectionItemHeaderProps) => {
 	);
 };
 
-const ItemTitle = ({ children, website, field, bold = true }: ItemTitleProps) => {
-	const inlineWebsiteUrl = getInlineItemWebsiteUrl(website);
+const ItemTitle = ({ children, website, field, bold = true, suffix = "" }: ItemTitleProps) => {
+	const inlineWebsiteIcon = useTemplateFeature("inlineWebsiteIcon");
+	const inlineWebsiteUrl = inlineWebsiteIcon ? website.url.trim() : getInlineItemWebsiteUrl(website);
+	const textStyle = useTemplateStyle("text");
+	const parentKey = useSemanticNodeKey();
+	const resolvedTitle = useResolvedNode(parentKey ? semanticNodeKeys.field(parentKey, field) : undefined);
+	const { metadata } = useRender();
 	const style = use(ItemHeaderRowNowrapContext) ? nowrapItemTitleStyle : wrappingItemTitleStyle;
+	const titleStyle = inlineWebsiteIcon ? { flexShrink: 1, minWidth: 0 } : style;
 	const title = bold ? (
-		<Bold style={style} semanticField={field}>
+		<Bold style={titleStyle} semanticField={field}>
 			{children}
+			{!inlineWebsiteUrl && suffix}
 		</Bold>
 	) : (
-		<Text style={style} semanticField={field}>
+		<Text style={titleStyle} semanticField={field}>
 			{children}
+			{!inlineWebsiteUrl && suffix}
 		</Text>
 	);
 
 	if (!inlineWebsiteUrl) return title;
 
 	return (
-		<Link style={style} semanticRole="inline-website" src={inlineWebsiteUrl}>
+		<Link
+			style={composeStyles(
+				style,
+				inlineWebsiteIcon
+					? { flexDirection: "row", alignItems: "baseline", maxWidth: "100%", flexShrink: 1 }
+					: undefined,
+			)}
+			semanticRole="inline-website"
+			src={inlineWebsiteUrl}
+		>
 			{title}
+			{inlineWebsiteIcon && (
+				<Icon
+					name="arrow-square-out"
+					size={metadata.typography.body.fontSize}
+					color={mergeStyles(textStyle, resolvedTitle.style).color ?? "#000000"}
+					nodeKey={parentKey ? semanticNodeKeys.icon(parentKey, "external-link") : undefined}
+				/>
+			)}
+			{suffix && <Text>{suffix}</Text>}
 		</Link>
 	);
 };
 
 const ItemWebsiteLink = ({ website }: ItemWebsiteLinkProps) => {
+	const inlineWebsiteIcon = useTemplateFeature("inlineWebsiteIcon");
+	if (inlineWebsiteIcon) return null;
 	if (!shouldRenderSeparateItemWebsite(website)) return null;
 
 	return (
@@ -863,6 +892,7 @@ const ExperienceItemContent = ({ item, header, splitRowStyle, alignEndStyle }: E
 const ExperienceSection = ({ sectionId = "experience", sectionData }: ItemSectionProps<ExperienceItem> = {}) => {
 	const data = useRender();
 	const experience = sectionData ?? data.sections.experience;
+	const positionFirst = useTemplateFeature("positionFirstExperienceHeader");
 	const items = getVisibleItems(experience, "experience");
 	const splitRowStyle = useSectionSplitRowStyle();
 	const alignEndStyle = useTemplateStyle("alignEnd");
@@ -944,7 +974,29 @@ const ExperienceSection = ({ sectionId = "experience", sectionData }: ItemSectio
 							<ExperienceItemContent
 								item={item}
 								header={
-									<SectionItemHeader>{inlineItemHeader ? renderInlineHeader() : renderSplitHeader()}</SectionItemHeader>
+									<SectionItemHeader>
+										{positionFirst && item.roles.length === 0 ? (
+											<>
+												<View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "baseline" }}>
+													<ItemTitle
+														field={hasPosition ? "position" : "company"}
+														website={item.website}
+														suffix={hasPosition && hasSplitRowText(item.company) ? ", " : ""}
+													>
+														{hasPosition ? item.position : item.company}
+													</ItemTitle>
+													{hasPosition && hasSplitRowText(item.company) && (
+														<Text semanticField="company">{item.company}</Text>
+													)}
+												</View>
+												<Text semanticField="period">{item.period}</Text>
+											</>
+										) : inlineItemHeader ? (
+											renderInlineHeader()
+										) : (
+											renderSplitHeader()
+										)}
+									</SectionItemHeader>
 								}
 								splitRowStyle={splitRowStyle}
 								alignEndStyle={alignEndStyle}
@@ -1035,8 +1087,6 @@ type EducationPeriodHeaderProps = {
 
 const EducationPeriodHeader = ({ item, splitRowStyle, alignEndStyle }: EducationPeriodHeaderProps) => {
 	const { rtl } = useRender();
-	const headerNodeKey = useSemanticNodeKey();
-	const titleNodeKey = semanticTemplatePartNodeKey(headerNodeKey, "education-header-row", "education-title");
 
 	return (
 		<>
@@ -1044,23 +1094,13 @@ const EducationPeriodHeader = ({ item, splitRowStyle, alignEndStyle }: Education
 				partKeys={["education-header-row"]}
 				style={composeStyles(splitRowStyle, { flexDirection: rtl ? "row-reverse" : "row", flexWrap: "nowrap" })}
 			>
-				<Text nodeKey={titleNodeKey} style={nowrapItemTitleStyle}>
-					<ItemTitle field="school" website={item.website}>
-						{item.school}
-					</ItemTitle>
-					{hasSplitRowText(item.area) && (
-						<Text semanticField="area">
-							{item.school ? ", " : ""}
-							{item.area}
-						</Text>
-					)}
-					{hasSplitRowText(item.degree) && (
-						<Text semanticField="degree">
-							{item.school || item.area ? " · " : ""}
-							{item.degree}
-						</Text>
-					)}
-				</Text>
+				<View style={nowrapItemTitleStyle}>
+					<SemanticTemplatePartView partKeys={["education-header-row", "education-title"]}>
+						<ItemTitle field="school" website={item.website}>
+							{item.school}
+						</ItemTitle>
+					</SemanticTemplatePartView>
+				</View>
 				{hasSplitRowText(item.period) && (
 					<Text
 						semanticField="period"
@@ -1070,7 +1110,17 @@ const EducationPeriodHeader = ({ item, splitRowStyle, alignEndStyle }: Education
 					</Text>
 				)}
 			</SemanticTemplatePartView>
-			{hasSplitRowText(item.location) && <Text semanticField="location">{item.location}</Text>}
+			{(hasSplitRowText(item.area) || hasSplitRowText(item.degree) || hasSplitRowText(item.location)) && (
+				<Text>
+					{hasSplitRowText(item.area) && <Text semanticField="area">{item.area}</Text>}
+					{hasSplitRowText(item.degree) && (
+						<Text semanticField="degree">{`${hasSplitRowText(item.area) ? ", " : ""}${item.degree}`}</Text>
+					)}
+					{hasSplitRowText(item.location) && (
+						<Text semanticField="location">{`${hasSplitRowText(item.area) || hasSplitRowText(item.degree) ? " | " : ""}${item.location}`}</Text>
+					)}
+				</Text>
+			)}
 			{hasSplitRowText(item.grade) && <Text semanticField="grade">{item.grade}</Text>}
 		</>
 	);
@@ -1256,6 +1306,7 @@ const SkillsSection = ({ sectionId = "skills", sectionData }: ItemSectionProps<S
 	const inlineStyle = useTemplateStyle("inline");
 	const metrics = getTemplateMetrics(data.metadata.page);
 	const skillLevelAfterName = useTemplateFeature("skillLevelAfterName");
+	const skillKeywordsAsList = useTemplateFeature("skillKeywordsAsList");
 
 	if (items.length === 0) return null;
 
@@ -1278,7 +1329,7 @@ const SkillsSection = ({ sectionId = "skills", sectionData }: ItemSectionProps<S
 						{skillLevelAfterName && <LevelDisplay level={item.level} />}
 						<View style={{ flexGrow: skills.columns > 1 ? 1 : 0 }}>
 							{hasSplitRowText(item.proficiency) && <Text semanticField="proficiency">{item.proficiency}</Text>}
-							{"keywordLayout" in skills && skills.keywordLayout === "list" ? (
+							{skillKeywordsAsList || ("keywordLayout" in skills && skills.keywordLayout === "list") ? (
 								item.keywords.map((keyword, index) => (
 									<Small key={index} semanticField="keywords">{`• ${keyword}`}</Small>
 								))

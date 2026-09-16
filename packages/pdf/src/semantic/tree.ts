@@ -260,6 +260,8 @@ const buildItem = ({
 	parentKey,
 	data,
 	skillLevelAfterName = false,
+	inlineWebsiteIcon = false,
+	positionFirstExperienceHeader = false,
 	requireItemHeaderPrimitive = false,
 }: {
 	item: ItemRecord;
@@ -267,14 +269,25 @@ const buildItem = ({
 	parentKey: string;
 	data: ResumeData;
 	skillLevelAfterName?: boolean;
+	inlineWebsiteIcon?: boolean;
+	positionFirstExperienceHeader?: boolean;
 	requireItemHeaderPrimitive?: boolean;
 }): SemanticNode => {
 	const key = semanticNodeKeys.item(parentKey, item.id);
 	const website = itemWebsite(item);
+	if (website && inlineWebsiteIcon) website.inlineLink = true;
 	const headerKey = semanticNodeKeys.itemHeader(key);
 	const headerChildren: SemanticNode[] = [];
 	const bodyChildren: SemanticNode[] = [];
 	const headerFieldNames = ITEM_HEADER_FIELDS[type];
+	const primaryField =
+		positionFirstExperienceHeader &&
+		type === "experience" &&
+		!(item.roles as unknown[] | undefined)?.length &&
+		typeof item.position === "string" &&
+		item.position.trim()
+			? "position"
+			: headerFieldNames[0];
 	const direction = isRTL(data.metadata.page.locale) ? "rtl" : "ltr";
 
 	if (
@@ -307,11 +320,22 @@ const buildItem = ({
 			name,
 			value: item[name],
 			direction,
-			structuredLink: type !== "profiles" && website?.inlineLink === true && name === headerFieldNames[0],
+			structuredLink: type !== "profiles" && website?.inlineLink === true && name === primaryField,
 		});
 
 		if (!field) continue;
 		(parent === headerKey ? headerChildren : bodyChildren).push(field);
+	}
+
+	if (website && inlineWebsiteIcon && type !== "profiles") {
+		headerChildren.push(
+			semanticNode({
+				key: semanticNodeKeys.icon(headerKey, "external-link"),
+				kind: "icon",
+				attributes: { name: "external-link" },
+				roles: ["decoration"],
+			}),
+		);
 	}
 
 	if (website && type !== "profiles") {
@@ -465,6 +489,8 @@ const buildSection = ({
 			parentKey: itemsKey,
 			data,
 			skillLevelAfterName: manifest.skillLevelAfterName ?? false,
+			inlineWebsiteIcon: manifest.inlineWebsiteIcon ?? false,
+			positionFirstExperienceHeader: manifest.positionFirstExperienceHeader ?? false,
 			requireItemHeaderPrimitive,
 		}),
 	);
@@ -605,7 +631,7 @@ const buildHeader = (
 				name: "custom",
 				id: field.id,
 				structuredLink: Boolean(getCustomFieldLinkUrl(field)),
-				icon: showIcons && Boolean(field.icon),
+				icon: showIcons && Boolean(field.iconOverride || field.icon),
 			}),
 		);
 	}

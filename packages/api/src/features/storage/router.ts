@@ -2,7 +2,7 @@ import { ORPCError } from "@orpc/server";
 import z from "zod";
 import { protectedProcedure } from "../../context";
 import { storageDeleteRateLimit, storageUploadRateLimit } from "../../middleware/rate-limit";
-import { getStorageService, isImageFile, processImageForUpload, uploadFile } from "./service";
+import { getStorageService, isImageFile, preserveOriginalPicture, processImageForUpload, uploadFile } from "./service";
 
 const storageService = getStorageService();
 
@@ -27,19 +27,30 @@ export const storageRouter = {
 			operationId: "uploadFile",
 			summary: "Upload a file",
 			description:
-				"Uploads a file to storage. Images are automatically resized and converted to JPEG format. Maximum file size is 10MB. Requires authentication.",
+				"Uploads a file to storage. Images are resized and converted to JPEG for avatars. Picture uploads can also preserve an untouched original. Maximum size per file is 10MB. Requires authentication.",
 			successDescription: "The file was uploaded successfully.",
 		})
-		.input(fileSchema)
+		.input(
+			z.union([
+				fileSchema,
+				z.object({
+					file: fileSchema,
+					original: fileSchema.refine((file) => isImageFile(file.type), "Unsupported picture format"),
+				}),
+			]),
+		)
 		.use(storageUploadRateLimit)
 		.output(
 			z.object({
 				url: z.string().describe("The public URL to access the uploaded file."),
+				originalUrl: z.string().optional(),
+				originalPdfUrl: z.string().optional(),
 				path: z.string().describe("The storage path of the uploaded file."),
 				contentType: z.string().describe("The MIME type of the uploaded file."),
 			}),
 		)
-		.handler(async ({ context, input: file }) => {
+		.handler(async ({ context, input }) => {
+			const file = input instanceof File ? input : input.file;
 			const originalMimeType = file.type;
 			const isImage = isImageFile(originalMimeType);
 
@@ -58,7 +69,16 @@ export const storageRouter = {
 
 			const result = await uploadFile({ userId: context.user.id, data, contentType });
 
+			let original: { originalUrl?: string; originalPdfUrl?: string } = {};
+			try {
+				if (!(input instanceof File)) original = await preserveOriginalPicture(context.user.id, input.original);
+			} catch (error) {
+				await storageService.delete(result.key);
+				throw error;
+			}
+
 			return {
+				...original,
 				url: result.url,
 				path: result.key,
 				contentType,

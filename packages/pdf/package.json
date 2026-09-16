@@ -4,6 +4,7 @@
 	"type": "module",
 	"private": true,
 	"exports": {
+		"./contact-svg": "./src/contact-svg.ts",
 		"./browser": "./src/browser.tsx",
 		"./document": "./src/document.tsx",
 		"./semantic": "./src/semantic/index.ts",

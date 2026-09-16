@@ -31,7 +31,16 @@ const itemWebsiteSchema = websiteSchema
 	})
 	.catch({ url: "", label: "", inlineLink: false });
 
+export const contactIconSchema = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("phosphor"), name: iconSchema }),
+	z.object({ type: z.literal("svg"), svg: z.string().max(32_768) }),
+]);
+
+export type ContactIcon = z.infer<typeof contactIconSchema>;
+
 export const pictureSchema = z.object({
+	originalUrl: z.string().optional(),
+	originalPdfUrl: z.string().optional(),
 	hidden: z.boolean().describe("Whether to hide the picture from the resume."),
 	fit: z
 		.enum(["cover", "contain"])
@@ -81,6 +90,7 @@ export const pictureSchema = z.object({
 });
 
 export const customFieldSchema = z.object({
+	iconOverride: contactIconSchema.optional(),
 	id: z.string().describe("The unique identifier for the custom field. Usually generated as a UUID."),
 	icon: iconSchema,
 	text: z.string().describe("The text to display for the custom field."),
@@ -88,6 +98,14 @@ export const customFieldSchema = z.object({
 });
 
 export const basicsSchema = z.object({
+	contactIcons: z
+		.object({
+			email: contactIconSchema.optional(),
+			phone: contactIconSchema.optional(),
+			location: contactIconSchema.optional(),
+			website: contactIconSchema.optional(),
+		})
+		.optional(),
 	name: z.string().describe("The full name of the author of the resume."),
 	headline: z.string().describe("The headline of the author of the resume."),
 	email: z.string().describe("The email address of the author of the resume."),

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import {
@@ -69,7 +70,7 @@ const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
 // mapped, not just JPEG. Non-image uploads (e.g. a cover-letter PDF) get their real extension.
 function buildFileKey(userId: string, contentType: string): string {
 	const extension = EXTENSION_BY_CONTENT_TYPE[contentType] ?? "bin";
-	return `uploads/${userId}/pictures/${Date.now()}.${extension}`;
+	return `uploads/${userId}/pictures/${randomUUID()}.${extension}`;
 }
 
 function buildPublicUrl(path: string): string {
@@ -111,6 +112,30 @@ export async function processImageForUpload(file: File): Promise<ProcessedImage>
 		data: new Uint8Array(processedBuffer),
 		contentType: "image/jpeg",
 	};
+}
+
+// Keep source bytes intact. React PDF only decodes JPEG/PNG raster images.
+export async function preserveOriginalPicture(
+	userId: string,
+	file: File,
+): Promise<{ originalUrl: string; originalPdfUrl?: string }> {
+	const data = new Uint8Array(await file.arrayBuffer());
+	const metadata = await sharp(data).metadata();
+	const contentType = (
+		{ jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" } as Record<string, string>
+	)[metadata.format ?? ""];
+	if (!contentType) throw new Error("Unsupported picture format");
+	const original = await uploadFile({ userId, data, contentType });
+	if (contentType === "image/jpeg" || contentType === "image/png") return { originalUrl: original.url };
+	try {
+		// Lossless, native-resolution compatibility copy for formats React PDF cannot decode.
+		const png = await sharp(data).keepMetadata().png().toBuffer();
+		const compatible = await uploadFile({ userId, data: png, contentType: "image/png" });
+		return { originalUrl: original.url, originalPdfUrl: compatible.url };
+	} catch (error) {
+		await getStorageService().delete(original.key);
+		throw error;
+	}
 }
 
 class LocalStorageService implements StorageService {

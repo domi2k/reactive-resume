@@ -124,6 +124,8 @@ export type TemplateSemanticManifest = {
 	template: Template;
 	skillLevelAfterName?: boolean;
 	educationPeriodInHeader?: boolean;
+	inlineWebsiteIcon?: boolean;
+	positionFirstExperienceHeader?: boolean;
 	regions: readonly TemplateSemanticRegion[];
 	header: {
 		region: "header";

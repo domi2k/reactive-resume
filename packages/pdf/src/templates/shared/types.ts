@@ -25,6 +25,9 @@ export type TemplateIconSlot =
 	| ((context: TemplateStyleContext) => Partial<TemplateIconProps>);
 
 export type TemplateFeatures = {
+	skillKeywordsAsList?: boolean;
+	positionFirstExperienceHeader?: boolean;
+	inlineWebsiteIcon?: boolean;
 	sectionTimeline?: boolean;
 	inlineItemHeader?: boolean;
 	stackSidebarItemHeader?: boolean;

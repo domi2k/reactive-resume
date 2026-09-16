@@ -1,9 +1,11 @@
 import type { Style } from "@react-pdf/types";
+import type { ContactIcon } from "@reactive-resume/schema/resume/data";
 import type { ComponentProps, ReactNode } from "react";
 import type { StyleInput } from "./styles";
 import { Icon as PhosphorIcon } from "phosphor-icons-react-pdf/dynamic";
 import { Children, isValidElement } from "react";
 import { Image, View } from "#react-pdf-renderer";
+import { sanitizeContactSvg } from "../../contact-svg";
 import { useRender } from "../../context";
 import { resolvedPdfFlowProps, resolvedPdfTextProps } from "../../semantic/adapter";
 import {
@@ -17,6 +19,7 @@ import {
 } from "../../semantic/context";
 import { semanticNodeKeys } from "../../semantic/node-keys";
 import { Link as PdfLink, Text as PdfText } from "../../text";
+import { ContactSvg } from "./contact-svg";
 import { useSectionStyleRule, useTemplateIconSlot, useTemplatePageNodeKey, useTemplateStyle } from "./context";
 import { resolveIconSize } from "./icon-size";
 import { getPictureShadow } from "./picture-shadow";
@@ -293,9 +296,10 @@ export const Bold = ({
 export const Icon = ({
 	style,
 	size: sizeProp,
+	override,
 	nodeKey,
 	...props
-}: ComponentProps<typeof PhosphorIcon> & { nodeKey?: string | undefined }) => {
+}: ComponentProps<typeof PhosphorIcon> & { nodeKey?: string | undefined; override?: ContactIcon | undefined }) => {
 	const { style: iconStyle, size: templateSize, ...iconProps } = useTemplateIconSlot("icon");
 	const iconRuleStyle = useSectionStyleRule("icon");
 	const composedStyle = composeStyles(asStyleInput(iconStyle), iconRuleStyle, asStyleInput(style));
@@ -316,10 +320,24 @@ export const Icon = ({
 
 	if (iconProps.display === "none" || !visible) return null;
 
+	if (override?.type === "svg" && sanitizeContactSvg(override.svg)) {
+		return (
+			<ContactSvg
+				source={override.svg}
+				width={resolvedSize ?? 12}
+				height={resolvedSize ?? 12}
+				color={String(mergeStyles(resolvedStyle).color ?? props.color ?? iconProps.color ?? "#000000")}
+				style={resolvedStyle}
+				{...(opacity === undefined ? {} : { opacity })}
+			/>
+		);
+	}
+
 	return (
 		<PhosphorIcon
 			{...iconProps}
 			{...props}
+			{...(override?.type === "phosphor" ? { name: override.name as ComponentProps<typeof PhosphorIcon>["name"] } : {})}
 			{...(resolvedSize === undefined ? {} : { size: resolvedSize })}
 			{...(opacity === undefined ? {} : { opacity })}
 			style={resolvedStyle}

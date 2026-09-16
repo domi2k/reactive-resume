@@ -57,7 +57,13 @@ type DominikHeaderProps = {
 	colors: TemplateColorRoles;
 };
 
-const dominikFeatures = { skillLevelAfterName: true, educationPeriodInHeader: true } satisfies TemplateFeatures;
+const dominikFeatures = {
+	skillLevelAfterName: true,
+	educationPeriodInHeader: true,
+	skillKeywordsAsList: true,
+	positionFirstExperienceHeader: true,
+	inlineWebsiteIcon: true,
+} satisfies TemplateFeatures;
 
 export const DominikPage = ({ page, pageSize, pageMinHeightStyle, showHeader, pageNumber }: TemplatePageProps) => {
 	const data = useRender();
@@ -131,7 +137,7 @@ const SidebarPicture = ({ ownerNodeKey }: SidebarPictureProps) => {
 			{visible && (
 				<Image
 					fixed
-					src={picture.url}
+					src={picture.originalPdfUrl || picture.originalUrl || picture.url}
 					style={composeStyles(backgroundLayer, { objectFit: picture.fit ?? "cover" }, resolved.style)}
 				/>
 			)}

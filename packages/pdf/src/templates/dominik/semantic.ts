@@ -4,6 +4,8 @@ import { itemHeaderRowPart } from "../../semantic/shared-parts";
 export const dominikSemanticManifest = {
 	template: "dominik",
 	skillLevelAfterName: true,
+	inlineWebsiteIcon: true,
+	positionFirstExperienceHeader: true,
 	educationPeriodInHeader: true,
 	regions: [
 		{ name: "header", placement: "sidebar", origins: [] },
@@ -24,8 +26,6 @@ export const dominikSemanticManifest = {
 				at: "start",
 				take: [
 					{ kind: "field", name: "school", sectionTypes: ["education"] },
-					{ kind: "field", name: "area", sectionTypes: ["education"] },
-					{ kind: "field", name: "degree", sectionTypes: ["education"] },
 					{ kind: "field", name: "period", sectionTypes: ["education"] },
 					{ kind: "link", sectionTypes: ["education"] },
 				],
@@ -35,16 +35,11 @@ export const dominikSemanticManifest = {
 			name: "education-title",
 			key: "education-title",
 			owner: { kind: "item-header", key: "item-header", sectionTypes: ["education"] },
-			binding: { type: "primitive", primitive: "Text", source: "existing" },
+			binding: { type: "primitive", primitive: "View", source: "existing" },
 			route: {
 				parent: "education-header-row",
 				at: "start",
-				take: [
-					{ kind: "field", name: "school" },
-					{ kind: "field", name: "area" },
-					{ kind: "field", name: "degree" },
-					{ kind: "link" },
-				],
+				take: [{ kind: "field", name: "school" }, { kind: "link" }],
 			},
 		},
 		{

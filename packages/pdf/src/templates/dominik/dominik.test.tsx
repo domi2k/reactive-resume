@@ -101,6 +101,44 @@ const renderPdf = async (data: ResumeData, template: Template = "dominik") =>
 	new Uint8Array(await act(() => renderToBuffer(<ResumeDocument data={data} template={template} />)));
 
 describe("Dominik", () => {
+	it("renders original image, vector contacts and position-first linked headers", async () => {
+		const data = fixture();
+		data.picture.originalUrl = data.picture.url;
+		data.picture.url = "https://invalid.example/avatar.png";
+		data.basics.contactIcons = {
+			email: { type: "svg", svg: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M0 0 L24 0 L12 24 Z"/></svg>' },
+		};
+		required(data.sections.education.items[0]).website.url = "https://example.com/school";
+		required(data.sections.skills.items[0]).keywords = ["Python", "SQL (PostgreSQL, SQLite)"];
+		data.sections.experience.items = [
+			{
+				id: "work",
+				hidden: false,
+				company: "Hackology",
+				position: "Team Leader",
+				location: "",
+				period: "May 2026",
+				website: { url: "https://example.com/work", label: "", inlineLink: false },
+				description: "<p>Led the team.</p>",
+				roles: [],
+			},
+		];
+		required(data.metadata.layout.pages[0]).main.unshift("experience");
+		data.metadata.stylesheet = { mode: "semantic", source: { languageVersion: 1, text: "@version 1;" } };
+		const nodes = hosts(await renderHost(data));
+		expect(nodes.some((node) => text(node) === "• Python")).toBe(true);
+		expect(nodes.some((node) => text(node) === "• SQL (PostgreSQL, SQLite)")).toBe(true);
+		expect(nodes.some((node) => text(node) === "Technical Physics | Krakow, Poland")).toBe(true);
+		expect(
+			nodes.some(
+				(node) =>
+					node.type === "LINK" && text(node) === "Team Leader, " && hosts(node).some((child) => child.type === "SVG"),
+			),
+		).toBe(true);
+		const bytes = await renderPdf(data);
+		expect(bytes.byteLength).toBeGreaterThan(1000);
+	});
+
 	it("registers its schema value, renderer and semantic manifest", () => {
 		expect(templateSchema.parse("dominik")).toBe("dominik");
 		expect(getTemplatePage("dominik")).toBe(DominikPage);
@@ -148,7 +186,11 @@ describe("Dominik", () => {
 		);
 		expect(headers).toHaveLength(2);
 		for (const header of headers) {
-			expect(header.children.map((child) => child.attributes.name)).toEqual(["education-header-row", "location"]);
+			expect(header.children.map((child) => child.attributes.name)).toEqual([
+				"education-header-row",
+				"area",
+				"location",
+			]);
 			expect(header.children[0]?.children.map((child) => child.attributes.name)).toEqual(["education-title", "period"]);
 		}
 		const rows = hosts(await renderHost(data)).filter(
@@ -240,33 +282,37 @@ describe("Dominik", () => {
 		}
 	});
 
-	it("wraps long institution text without overlapping date in exported PDF", async () => {
-		const data = fixture();
-		required(data.sections.education.items[0]).school =
-			"AGH University of Science and Technology with a long institution name";
-		const loading = getDocument({ data: await renderPdf(data), useSystemFonts: true });
-		try {
-			const document = await loading.promise;
-			const page = await document.getPage(1);
-			const items = (await page.getTextContent()).items.flatMap((item) => ("str" in item ? [item] : []));
-			const date = required(items.find((item) => item.str.includes("2023")));
-			const school = required(items.find((item) => item.str.includes("AGH")));
-			expect(date).toBeDefined();
-			expect(school).toBeDefined();
-			expect(Math.abs(date.transform[5] - school.transform[5])).toBeLessThan(2);
-			for (const item of items.filter(
-				(item) =>
-					item !== date &&
-					Math.abs(item.transform[5] - date.transform[5]) < 2 &&
-					item.transform[4] >= school.transform[4] &&
-					item.str.trim(),
-			)) {
-				expect(item.transform[4] + item.width).toBeLessThanOrEqual(date.transform[4] + 1);
+	it.each([false, true])(
+		"wraps long institution text without overlapping date in exported PDF (linked: %s)",
+		async (linked) => {
+			const data = fixture();
+			required(data.sections.education.items[0]).school =
+				"AGH University of Science and Technology with a long institution name";
+			if (linked) required(data.sections.education.items[0]).website.url = "https://example.com/school";
+			const loading = getDocument({ data: await renderPdf(data), useSystemFonts: true });
+			try {
+				const document = await loading.promise;
+				const page = await document.getPage(1);
+				const items = (await page.getTextContent()).items.flatMap((item) => ("str" in item ? [item] : []));
+				const date = required(items.find((item) => item.str.includes("2023")));
+				const school = required(items.find((item) => item.str.includes("AGH")));
+				expect(date).toBeDefined();
+				expect(school).toBeDefined();
+				expect(Math.abs(date.transform[5] - school.transform[5])).toBeLessThan(2);
+				for (const item of items.filter(
+					(item) =>
+						item !== date &&
+						Math.abs(item.transform[5] - date.transform[5]) < 2 &&
+						item.transform[4] >= school.transform[4] &&
+						item.str.trim(),
+				)) {
+					expect(item.transform[4] + item.width).toBeLessThanOrEqual(date.transform[4] + 1);
+				}
+			} finally {
+				await loading.destroy();
 			}
-		} finally {
-			await loading.destroy();
-		}
-	});
+		},
+	);
 
 	it("paints header and sidebar sections above the darkened picture", async () => {
 		const data = fixture();

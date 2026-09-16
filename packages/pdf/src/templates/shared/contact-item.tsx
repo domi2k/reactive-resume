@@ -3,6 +3,7 @@ import type { CustomField } from "@reactive-resume/schema/resume/data";
 import type { IconWeight } from "phosphor-icons-react-pdf";
 import type { IconName } from "phosphor-icons-react-pdf/dynamic";
 import { View } from "#react-pdf-renderer";
+import { useRender } from "../../context";
 import { resolvedPdfFlowProps } from "../../semantic/adapter";
 import { useResolvedNode, useSemanticNodeKey, useSemanticNodeVisible } from "../../semantic/context";
 import { semanticNodeKeys } from "../../semantic/node-keys";
@@ -56,6 +57,7 @@ export const WebsiteContactItem = ({
 	iconWeight,
 	primitiveNodeKey,
 }: WebsiteContactItemProps) => {
+	const { basics } = useRender();
 	const keys = useContactNodeKeys("website", undefined, primitiveNodeKey);
 	const visible = useSemanticNodeVisible(keys.primitiveNodeKey);
 	if (!website.url || !visible) return null;
@@ -64,6 +66,7 @@ export const WebsiteContactItem = ({
 		<Link nodeKey={keys.primitiveNodeKey} src={website.url} {...(style ? { style } : {})}>
 			<Icon
 				nodeKey={keys.iconNodeKey}
+				override={basics.contactIcons?.website}
 				name="globe"
 				{...(iconColor ? { color: iconColor } : {})}
 				{...(iconWeight ? { weight: iconWeight } : {})}
@@ -91,6 +94,7 @@ export const CustomFieldContactItem = ({
 		<>
 			<Icon
 				nodeKey={keys.iconNodeKey}
+				override={field.iconOverride}
 				name={field.icon as IconName}
 				{...(iconColor ? { color: iconColor } : {})}
 				{...(iconWeight ? { weight: iconWeight } : {})}
@@ -137,6 +141,7 @@ export const EmailContactItem = ({
 	iconName = "envelope",
 	primitiveNodeKey,
 }: EmailContactItemProps) => {
+	const { basics } = useRender();
 	const keys = useContactNodeKeys("email", undefined, primitiveNodeKey);
 	const visible = useSemanticNodeVisible(keys.primitiveNodeKey);
 	if (!email || !visible) return null;
@@ -144,6 +149,7 @@ export const EmailContactItem = ({
 		<Link nodeKey={keys.primitiveNodeKey} src={`mailto:${email}`} {...(style ? { style } : {})}>
 			<Icon
 				nodeKey={keys.iconNodeKey}
+				override={basics.contactIcons?.email}
 				name={iconName}
 				{...(iconColor ? { color: iconColor } : {})}
 				{...(iconWeight ? { weight: iconWeight } : {})}
@@ -172,6 +178,7 @@ export const PhoneContactItem = ({
 	iconWeight,
 	primitiveNodeKey,
 }: PhoneContactItemProps) => {
+	const { basics } = useRender();
 	const keys = useContactNodeKeys("phone", undefined, primitiveNodeKey);
 	const visible = useSemanticNodeVisible(keys.primitiveNodeKey);
 	if (!phone || !visible) return null;
@@ -179,6 +186,7 @@ export const PhoneContactItem = ({
 		<Link nodeKey={keys.primitiveNodeKey} src={`tel:${phone}`} {...(style ? { style } : {})}>
 			<Icon
 				nodeKey={keys.iconNodeKey}
+				override={basics.contactIcons?.phone}
 				name="phone"
 				{...(iconColor ? { color: iconColor } : {})}
 				{...(iconWeight ? { weight: iconWeight } : {})}
@@ -207,6 +215,7 @@ export const LocationContactItem = ({
 	iconWeight,
 	primitiveNodeKey,
 }: LocationContactItemProps) => {
+	const { basics } = useRender();
 	const keys = useContactNodeKeys("location", undefined, primitiveNodeKey);
 	const resolved = useResolvedNode(keys.primitiveNodeKey);
 	const visible = useSemanticNodeVisible(keys.primitiveNodeKey);
@@ -215,6 +224,7 @@ export const LocationContactItem = ({
 		<View {...resolvedPdfFlowProps(resolved)} style={composeStyles(style, resolved.style)}>
 			<Icon
 				nodeKey={keys.iconNodeKey}
+				override={basics.contactIcons?.location}
 				name="map-pin"
 				{...(iconColor ? { color: iconColor } : {})}
 				{...(iconWeight ? { weight: iconWeight } : {})}

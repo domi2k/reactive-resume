@@ -3,6 +3,7 @@ import { Trans } from "@lingui/react/macro";
 import { basicsSchema } from "@reactive-resume/schema/resume/data";
 import { FormControl, FormItem, FormLabel, FormMessage } from "@reactive-resume/ui/components/form";
 import { Input } from "@reactive-resume/ui/components/input";
+import { ContactIconPicker } from "@/components/input/contact-icon-picker";
 import { URLInput } from "@/components/input/url-input";
 import { useCurrentBuilderResumeSelector, useUpdateResumeData } from "@/features/resume/builder/draft";
 import { useSyncFormValues } from "@/hooks/use-sync-form-values";
@@ -127,6 +128,11 @@ function BasicsSectionForm() {
 					</FormItem>
 				)}
 			</form.Field>
+			<form.Field name="contactIcons.email">
+				{(field) => (
+					<ContactIconPicker value={field.state.value} defaultIcon="envelope" onChange={field.handleChange} />
+				)}
+			</form.Field>
 
 			<form.Field name="phone">
 				{(field) => (
@@ -149,6 +155,9 @@ function BasicsSectionForm() {
 						<FormMessage errors={field.state.meta.errors} />
 					</FormItem>
 				)}
+			</form.Field>
+			<form.Field name="contactIcons.phone">
+				{(field) => <ContactIconPicker value={field.state.value} defaultIcon="phone" onChange={field.handleChange} />}
 			</form.Field>
 
 			<form.Field name="location">
@@ -173,6 +182,9 @@ function BasicsSectionForm() {
 					</FormItem>
 				)}
 			</form.Field>
+			<form.Field name="contactIcons.location">
+				{(field) => <ContactIconPicker value={field.state.value} defaultIcon="map-pin" onChange={field.handleChange} />}
+			</form.Field>
 
 			<form.Field name="website">
 				{(field) => (
@@ -194,6 +206,9 @@ function BasicsSectionForm() {
 						<FormMessage errors={field.state.meta.errors} />
 					</FormItem>
 				)}
+			</form.Field>
+			<form.Field name="contactIcons.website">
+				{(field) => <ContactIconPicker value={field.state.value} defaultIcon="globe" onChange={field.handleChange} />}
 			</form.Field>
 
 			<CustomFieldsSection form={form} />

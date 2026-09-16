@@ -10,7 +10,7 @@ import { Input } from "@reactive-resume/ui/components/input";
 import { Label } from "@reactive-resume/ui/components/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@reactive-resume/ui/components/popover";
 import { generateId } from "@reactive-resume/utils/string";
-import { IconPicker } from "@/components/input/icon-picker";
+import { ContactIconPicker } from "@/components/input/contact-icon-picker";
 import { withForm } from "@/libs/tanstack-form";
 
 type FormValues = z.infer<typeof basicsSchema>;
@@ -41,22 +41,13 @@ export const CustomFieldsSection = withForm({
 					>
 						{customFieldsField.state.value.map((field: CustomField, index: number) => (
 							<CustomFieldItem key={field.id} field={field}>
-								<form.Field name={`customFields[${index}].icon`}>
+								<form.Field name={`customFields[${index}].iconOverride`}>
 									{(iconField) => (
-										<FormItem className="shrink-0">
-											<FormControl
-												render={
-													<IconPicker
-														name={iconField.name}
-														value={iconField.state.value}
-														className="rounded-r-none! border-e-0!"
-														onChange={(icon) => {
-															iconField.handleChange(icon);
-														}}
-													/>
-												}
-											/>
-										</FormItem>
+										<ContactIconPicker
+											value={iconField.state.value}
+											defaultIcon={field.icon}
+											onChange={iconField.handleChange}
+										/>
 									)}
 								</form.Field>
 

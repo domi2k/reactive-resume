@@ -119,6 +119,8 @@ function PicturePreviewControls({
 										onBlur={field.handleBlur}
 										onChange={(event) => {
 											field.handleChange(event.target.value);
+											form.setFieldValue("originalUrl", undefined);
+											form.setFieldValue("originalPdfUrl", undefined);
 											onAutoSave();
 										}}
 									/>
@@ -539,45 +541,48 @@ function PictureSectionForm() {
 		if (!picture.url) return;
 
 		const appOrigin = window.location.origin;
-		const pictureUrl = new URL(picture.url, appOrigin);
-		const pictureOrigin = pictureUrl.origin;
-
-		const filename = pictureUrl.pathname.split("/").pop();
-		if (!filename) return;
-
-		// If the picture is from the same origin, attempt to delete it
-		if (pictureOrigin === appOrigin) deleteFile({ filename });
+		for (const url of new Set([picture.url, picture.originalUrl, picture.originalPdfUrl])) {
+			if (!url) continue;
+			const pictureUrl = new URL(url, appOrigin);
+			const filename = pictureUrl.pathname.split("/").pop();
+			if (filename && pictureUrl.origin === appOrigin) deleteFile({ filename });
+		}
 
 		form.reset(defaultResumeData.picture);
 		persist(defaultResumeData.picture);
 	};
 
-	const uploadPictureFile = (file: File) => {
+	const uploadPictureFile = (file: File, original: File = file) => {
 		const toastId = toast.add({ type: "loading", description: t`Uploading picture…` });
 
-		uploadFile(file, {
-			onSuccess: ({ url }) => {
-				form.setFieldValue("url", url);
-				handleAutoSave();
-				toast.close(toastId);
+		uploadFile(
+			{ file, original },
+			{
+				onSuccess: ({ url, originalUrl, originalPdfUrl }) => {
+					form.setFieldValue("url", url);
+					form.setFieldValue("originalUrl", originalUrl);
+					form.setFieldValue("originalPdfUrl", originalPdfUrl);
+					handleAutoSave();
+					toast.close(toastId);
+				},
+				onError: (error) => {
+					toast.add({
+						type: "error",
+						description: getReadableErrorMessage(
+							error,
+							t({
+								comment: "Fallback toast when uploading profile picture for resume fails",
+								message: "Failed to upload picture. Please try again.",
+							}),
+						),
+						id: toastId,
+					});
+				},
+				onSettled: () => {
+					if (fileInputRef.current) fileInputRef.current.value = "";
+				},
 			},
-			onError: (error) => {
-				toast.add({
-					type: "error",
-					description: getReadableErrorMessage(
-						error,
-						t({
-							comment: "Fallback toast when uploading profile picture for resume fails",
-							message: "Failed to upload picture. Please try again.",
-						}),
-					),
-					id: toastId,
-				});
-			},
-			onSettled: () => {
-				if (fileInputRef.current) fileInputRef.current.value = "";
-			},
-		});
+		);
 	};
 
 	const onUploadPicture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -615,7 +620,7 @@ function PictureSectionForm() {
 			fileToUpload = cropState.file;
 		}
 
-		uploadPictureFile(fileToUpload);
+		uploadPictureFile(fileToUpload, cropState.file);
 		closeCropDialog();
 	};
 
