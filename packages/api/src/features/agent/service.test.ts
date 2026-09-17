@@ -46,6 +46,7 @@ vi.mock("@reactive-resume/db/schema", () => ({
 		archivedAt: "agent_threads.archived_at",
 		status: "agent_threads.status",
 		reviewPatches: "agent_threads.review_patches",
+		reasoningEffort: "agent_threads.reasoning_effort",
 		activeRunId: "agent_threads.active_run_id",
 		activeStreamId: "agent_threads.active_stream_id",
 		activeRunStartedAt: "agent_threads.active_run_started_at",
@@ -114,7 +115,7 @@ vi.mock("ai", async (importOriginal) => ({
 
 // Minimal V4 model stub: the real wrapLanguageModel/addToolInputExamplesMiddleware run against it.
 vi.mock("../ai/service", () => ({
-	getAgentModel: vi.fn(() => ({
+	getModel: vi.fn(() => ({
 		specificationVersion: "v4",
 		provider: "mock",
 		modelId: "mock-model",
@@ -274,7 +275,8 @@ describe("agentService.threads.get", () => {
 			.mockImplementationOnce(threadSelect)
 			.mockImplementationOnce(emptyListSelect)
 			.mockImplementationOnce(emptyListSelect)
-			.mockImplementationOnce(emptyListSelect);
+			.mockImplementationOnce(emptyListSelect)
+			.mockImplementationOnce(() => selectLimitResult([{ provider: "openai", model: "gpt-5.6-luna" }]));
 
 		resumeServiceMock.getById.mockResolvedValue({
 			id: "resume-1",
@@ -289,7 +291,60 @@ describe("agentService.threads.get", () => {
 
 		expect(result.isReadOnly).toBe(true);
 		expect(result.thread.status).toBe("archived");
+		expect(result.thread.reasoningEffort).toBe("medium");
+		expect(result.reasoningEfforts).toEqual(["none", "low", "medium", "high", "xhigh", "max"]);
 		expect(result.resume).toEqual(expect.objectContaining({ id: "resume-1" }));
+	});
+});
+
+describe("conversation reasoning settings", () => {
+	it("persists changes independently of provider settings and restores them on reopen", async () => {
+		let thread = buildActiveThread({ reasoningEffort: "medium" });
+		const { agentService } = await import("./service");
+		for (const reasoningEffort of ["high", "none"] as const) {
+			dbMock.select
+				.mockImplementationOnce(() => selectLimitResult([thread]))
+				.mockImplementationOnce(() => selectLimitResult([{ provider: "openai", model: "gpt-5.6-luna" }]));
+			const set = vi.fn((settings) => {
+				thread = { ...thread, ...settings };
+				return { where: vi.fn(() => ({ returning: vi.fn(async () => [thread]) })) };
+			});
+			dbMock.update.mockReturnValue({ set });
+			await expect(
+				agentService.threads.update({ id: "thread-1", userId: "user-1", reasoningEffort }),
+			).resolves.toMatchObject({ reasoningEffort, reviewPatches: false });
+			expect(set).toHaveBeenCalledWith({ reasoningEffort });
+			dbMock.select
+				.mockImplementationOnce(() => selectLimitResult([thread]))
+				.mockImplementationOnce(() => selectOrderByResult([]))
+				.mockImplementationOnce(() => selectOrderByResult([]))
+				.mockImplementationOnce(() => selectOrderByResult([]))
+				.mockImplementationOnce(() => selectLimitResult([{ provider: "openai", model: "gpt-5.6-luna" }]));
+			resumeServiceMock.getById.mockResolvedValue({ id: "resume-1" });
+			await expect(agentService.threads.get({ id: "thread-1", userId: "user-1" })).resolves.toMatchObject({
+				thread: { reasoningEffort },
+			});
+		}
+	});
+
+	it("rejects reasoning changes for compatible providers", async () => {
+		dbMock.select
+			.mockImplementationOnce(() => selectLimitResult([buildActiveThread()]))
+			.mockImplementationOnce(() => selectLimitResult([{ provider: "openai-compatible", model: "gpt-5.6-luna" }]));
+		const { agentService } = await import("./service");
+		await expect(
+			agentService.threads.update({ id: "thread-1", userId: "user-1", reasoningEffort: "high" }),
+		).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("does not support") });
+		expect(dbMock.update).not.toHaveBeenCalled();
+	});
+
+	it("rejects settings changes during a run", async () => {
+		dbMock.select.mockImplementationOnce(() => selectLimitResult([buildActiveThread({ activeRunId: "run-1" })]));
+		const { agentService } = await import("./service");
+		await expect(
+			agentService.threads.update({ id: "thread-1", userId: "user-1", reasoningEffort: "high" }),
+		).rejects.toMatchObject({ code: "CONFLICT" });
+		expect(dbMock.update).not.toHaveBeenCalled();
 	});
 });
 
@@ -348,88 +403,100 @@ describe("agentService.messages.send", () => {
 		vi.clearAllMocks();
 	});
 
-	it("strips forged agent attachment UI parts when no attachment IDs are selected", async () => {
-		const activeThread = buildActiveThread();
-		const persistedMessage = {
-			id: "message-1",
-			userId: "user-1",
-			threadId: "thread-1",
-			role: "user",
-			status: "completed",
-			sequence: 0,
-			uiMessage: {
-				id: "ui-message-1",
+	it.each([undefined, "medium", "high", "none"] as const)(
+		"uses saved effort %s and strips forged attachment parts",
+		async (reasoningEffort) => {
+			const activeThread = buildActiveThread({ reasoningEffort });
+			const persistedMessage = {
+				id: "message-1",
+				userId: "user-1",
+				threadId: "thread-1",
 				role: "user",
-				parts: [{ type: "text", text: "Use this file" }],
-			},
-		};
-		const insertValues: unknown[] = [];
-
-		dbMock.select
-			.mockImplementationOnce(() => selectLimitResult([activeThread]))
-			.mockImplementationOnce(() => selectWhereResult([{ maxSequence: -1 }]))
-			.mockImplementationOnce(() => selectWhereResult([{ total: 1 }]))
-			.mockImplementationOnce(() => selectOrderByResult([persistedMessage]));
-
-		dbMock.insert.mockReturnValue({
-			values: vi.fn((value) => {
-				insertValues.push(value);
-				return { returning: vi.fn(async () => [persistedMessage]) };
-			}),
-		});
-		dbMock.update.mockReturnValue({ set: vi.fn(() => ({ where: vi.fn(async () => undefined) })) });
-
-		claimActiveAgentRunMock.mockResolvedValue(true);
-		aiProvidersServiceMock.getRunnableById.mockResolvedValue({
-			id: "provider-1",
-			provider: "openai",
-			model: "gpt-5",
-			apiKey: "secret",
-			baseURL: null,
-		});
-		aiProvidersServiceMock.markUsed.mockResolvedValue(undefined);
-
-		const [{ convertToModelMessages, ToolLoopAgent }, { agentStreamLifecycle }, { streamToEventIterator }] =
-			await Promise.all([import("ai"), import("./streams"), import("@orpc/server")]);
-		vi.mocked(convertToModelMessages).mockResolvedValue([
-			{ role: "user", content: [{ type: "text", text: "Use this file" }] },
-		]);
-		class MockToolLoopAgent {
-			stream = vi.fn(async () => ({ toUIMessageStream: vi.fn(() => new ReadableStream()) }));
-		}
-		vi.mocked(ToolLoopAgent).mockImplementation(MockToolLoopAgent as never);
-		vi.mocked(agentStreamLifecycle.create).mockResolvedValue(new ReadableStream());
-		vi.mocked(streamToEventIterator).mockReturnValue("iterator" as never);
-
-		const { agentService } = await import("./service");
-
-		await agentService.messages.send({
-			threadId: "thread-1",
-			userId: "user-1",
-			message: {
-				id: "ui-message-1",
-				role: "user",
-				parts: [
-					{ type: "text", text: "Use this file" },
-					{
-						type: "file",
-						url: "agent-attachment:foreign-attachment",
-						mediaType: "text/plain",
-						filename: "forged.txt",
-					},
-				],
-				// biome-ignore lint/suspicious/noExplicitAny: minimal fixture for unit test
-			} as any,
-		});
-
-		expect(insertValues).toEqual([
-			expect.objectContaining({
-				uiMessage: expect.objectContaining({
+				status: "completed",
+				sequence: 0,
+				uiMessage: {
+					id: "ui-message-1",
+					role: "user",
 					parts: [{ type: "text", text: "Use this file" }],
+				},
+			};
+			const insertValues: unknown[] = [];
+
+			dbMock.select
+				.mockImplementationOnce(() => selectLimitResult([activeThread]))
+				.mockImplementationOnce(() => selectWhereResult([{ maxSequence: -1 }]))
+				.mockImplementationOnce(() => selectWhereResult([{ total: 1 }]))
+				.mockImplementationOnce(() => selectOrderByResult([persistedMessage]));
+
+			dbMock.insert.mockReturnValue({
+				values: vi.fn((value) => {
+					insertValues.push(value);
+					return { returning: vi.fn(async () => [persistedMessage]) };
 				}),
-			}),
-		]);
-	});
+			});
+			dbMock.update.mockReturnValue({ set: vi.fn(() => ({ where: vi.fn(async () => undefined) })) });
+
+			claimActiveAgentRunMock.mockResolvedValue(true);
+			aiProvidersServiceMock.getRunnableById.mockResolvedValue({
+				id: "provider-1",
+				provider: "openai",
+				model: "gpt-5.6-luna",
+				apiKey: "secret",
+				baseURL: null,
+			});
+			aiProvidersServiceMock.markUsed.mockResolvedValue(undefined);
+
+			const [{ convertToModelMessages, ToolLoopAgent }, { agentStreamLifecycle }, { streamToEventIterator }] =
+				await Promise.all([import("ai"), import("./streams"), import("@orpc/server")]);
+			vi.mocked(convertToModelMessages).mockResolvedValue([
+				{ role: "user", content: [{ type: "text", text: "Use this file" }] },
+			]);
+			class MockToolLoopAgent {
+				stream = vi.fn(async () => ({ toUIMessageStream: vi.fn(() => new ReadableStream()) }));
+			}
+			vi.mocked(ToolLoopAgent).mockImplementation(MockToolLoopAgent as never);
+			vi.mocked(agentStreamLifecycle.create).mockResolvedValue(new ReadableStream());
+			vi.mocked(streamToEventIterator).mockReturnValue("iterator" as never);
+
+			const { agentService } = await import("./service");
+
+			await agentService.messages.send({
+				threadId: "thread-1",
+				userId: "user-1",
+				message: {
+					id: "ui-message-1",
+					role: "user",
+					parts: [
+						{ type: "text", text: "Use this file" },
+						{
+							type: "file",
+							url: "agent-attachment:foreign-attachment",
+							mediaType: "text/plain",
+							filename: "forged.txt",
+						},
+					],
+					// biome-ignore lint/suspicious/noExplicitAny: minimal fixture for unit test
+				} as any,
+			});
+
+			const { getModel } = await import("../ai/service");
+			expect(getModel).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					provider: "openai",
+					model: "gpt-5.6-luna",
+					reasoningEffort: reasoningEffort ?? "medium",
+				}),
+			);
+
+			expect(insertValues).toEqual([
+				expect.objectContaining({
+					uiMessage: expect.objectContaining({
+						parts: [{ type: "text", text: "Use this file" }],
+					}),
+				}),
+			]);
+		},
+	);
 
 	it("stores snapshotData and applies a valid JSON Patch guarded by the pre-read timestamp", async () => {
 		const activeThread = buildActiveThread();

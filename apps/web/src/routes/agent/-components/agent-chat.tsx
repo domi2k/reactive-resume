@@ -1,4 +1,5 @@
 import type { AgentUIMessage } from "@reactive-resume/ai/tools/agent-tool-contracts";
+import type { OpenAIReasoningEffort } from "@reactive-resume/ai/types";
 import type { UIMessage } from "ai";
 import type * as React from "react";
 import type { RouterOutput } from "@/libs/orpc/client";
@@ -36,6 +37,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { agentMessageMetadataSchema } from "@reactive-resume/ai/tools/agent-tool-contracts";
+import { openAIReasoningEffortSchema } from "@reactive-resume/ai/types";
 import {
 	Attachment,
 	AttachmentContent,
@@ -146,6 +148,8 @@ export type AgentChatProps = {
 	readOnlyReason: "archived" | "missing" | null;
 	threadStatus: string;
 	reviewPatches: boolean;
+	reasoningEffort: OpenAIReasoningEffort;
+	reasoningEfforts: OpenAIReasoningEffort[];
 	activeRunId: string | null;
 	actions: AgentAction[];
 	onToggleThreads?: () => void;
@@ -179,6 +183,9 @@ type AgentChatHeaderProps = {
 	isUpdatePending: boolean;
 	isStreaming: boolean;
 	reviewPatches: boolean;
+	reasoningEffort: OpenAIReasoningEffort;
+	reasoningEfforts: OpenAIReasoningEffort[];
+	onReasoningEffortChange: (value: OpenAIReasoningEffort) => void;
 	threadTokenTotal: number;
 	onArchive: () => void;
 	onCopyConversation: () => void;
@@ -787,6 +794,8 @@ export function AgentChat({
 	readOnlyReason,
 	threadStatus,
 	reviewPatches,
+	reasoningEffort,
+	reasoningEfforts,
 	activeRunId,
 	actions,
 	onToggleThreads,
@@ -1041,11 +1050,11 @@ export function AgentChat({
 		[addToolApprovalResponse],
 	);
 
-	const toggleReviewPatches = (nextReviewPatches: boolean) => {
+	const updateSettings = (settings: { reviewPatches?: boolean; reasoningEffort?: OpenAIReasoningEffort }) => {
 		updateThreadMutation.mutate(
-			{ id: threadId, reviewPatches: nextReviewPatches },
+			{ id: threadId, ...settings },
 			{
-				onSuccess: () => void refreshThread(),
+				onSuccess: refreshThread,
 				onError: (error) =>
 					toast.add({
 						type: "error",
@@ -1118,6 +1127,9 @@ export function AgentChat({
 				isUpdatePending={updateThreadMutation.isPending}
 				isStreaming={isStreaming}
 				reviewPatches={reviewPatches}
+				reasoningEffort={reasoningEffort}
+				reasoningEfforts={reasoningEfforts}
+				onReasoningEffortChange={(value) => updateSettings({ reasoningEffort: value })}
 				threadTokenTotal={threadTokenTotal}
 				onArchive={handleArchive}
 				onClose={onClose}
@@ -1125,7 +1137,7 @@ export function AgentChat({
 				onCopyConversationJson={copyConversationJson}
 				onDelete={() => void handleDelete()}
 				onToggleResume={onToggleResume}
-				onToggleReviewPatches={toggleReviewPatches}
+				onToggleReviewPatches={(value) => updateSettings({ reviewPatches: value })}
 				onToggleThreads={onToggleThreads}
 			/>
 
@@ -1134,7 +1146,7 @@ export function AgentChat({
 			<AgentChatMessages
 				actionsById={actionsById}
 				error={error}
-				isReadOnly={isReadOnly}
+				isReadOnly={isReadOnly || updateThreadMutation.isPending}
 				isReverting={revertMutation.isPending}
 				isStreaming={isStreaming}
 				messages={messages}
@@ -1148,7 +1160,7 @@ export function AgentChat({
 			<AgentChatComposer
 				fileInputRef={fileInputRef}
 				input={input}
-				isReadOnly={isReadOnly}
+				isReadOnly={isReadOnly || updateThreadMutation.isPending}
 				isStreaming={isStreaming}
 				isUploading={isUploading}
 				pendingAttachments={pendingAttachments}
@@ -1264,6 +1276,9 @@ function AgentChatHeader({
 	isUpdatePending,
 	isStreaming,
 	reviewPatches,
+	reasoningEffort,
+	reasoningEfforts,
+	onReasoningEffortChange,
 	threadTokenTotal,
 	onArchive,
 	onClose,
@@ -1296,6 +1311,12 @@ function AgentChatHeader({
 				) : null}
 			</div>
 			<div className="flex items-center gap-1">
+				<AgentReasoningSelect
+					value={reasoningEffort}
+					options={reasoningEfforts}
+					disabled={isArchived || isStreaming || isUpdatePending}
+					onChange={onReasoningEffortChange}
+				/>
 				{onToggleResume ? (
 					<Button size="icon-sm" variant="ghost" onClick={onToggleResume}>
 						<SquaresFourIcon />
@@ -1364,6 +1385,34 @@ function AgentChatHeader({
 				) : null}
 			</div>
 		</div>
+	);
+}
+
+type AgentReasoningSelectProps = {
+	value: OpenAIReasoningEffort;
+	options: OpenAIReasoningEffort[];
+	disabled: boolean;
+	onChange: (value: OpenAIReasoningEffort) => void;
+};
+
+function AgentReasoningSelect({ value, options, disabled, onChange }: AgentReasoningSelectProps) {
+	if (!options.length) return null;
+	return (
+		<label className="flex items-center gap-2 text-muted-foreground text-xs">
+			<Trans>Reasoning effort</Trans>
+			<select
+				className="rounded-md border bg-background p-1 text-foreground disabled:opacity-50"
+				value={value}
+				disabled={disabled}
+				onChange={(event) => onChange(openAIReasoningEffortSchema.parse(event.target.value))}
+			>
+				{options.map((effort) => (
+					<option key={effort} value={effort}>
+						{effort}
+					</option>
+				))}
+			</select>
+		</label>
 	);
 }
 

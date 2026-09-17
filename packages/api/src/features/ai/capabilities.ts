@@ -1,11 +1,21 @@
 import type { AIProvider } from "@reactive-resume/ai/types";
-import { AI_PROVIDER_DEFAULT_BASE_URLS } from "@reactive-resume/ai/types";
+import { AI_PROVIDER_DEFAULT_BASE_URLS, openAIReasoningEffortSchema } from "@reactive-resume/ai/types";
 
 type AiProviderCapabilityInput = {
 	provider: AIProvider;
 	model: string;
 	baseURL?: string | null;
 };
+
+// Verified model capabilities, not transport routing. Every OpenAI model uses Responses.
+// https://developers.openai.com/api/docs/models/gpt-5.6-luna (also Sol and Terra)
+const OPENAI_CONFIGURABLE_REASONING_MODELS = new Set(["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"]);
+
+export function getReasoningEfforts(input: Pick<AiProviderCapabilityInput, "provider" | "model">) {
+	return input.provider === "openai" && OPENAI_CONFIGURABLE_REASONING_MODELS.has(input.model)
+		? openAIReasoningEffortSchema.options
+		: [];
+}
 
 function normalizeDirectOpenAIBaseUrl(baseURL: string) {
 	try {

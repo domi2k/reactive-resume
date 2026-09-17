@@ -1,0 +1,2 @@
+ALTER TABLE "agent_threads" ADD COLUMN "reasoning_effort" text DEFAULT 'medium' NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_threads" ADD CONSTRAINT "agent_threads_reasoning_effort_check" CHECK ("reasoning_effort" in ('none', 'low', 'medium', 'high', 'xhigh', 'max'));

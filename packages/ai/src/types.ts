@@ -23,6 +23,9 @@ export type AIProvider = (typeof AI_PROVIDERS)[number];
 
 export const aiProviderSchema = z.enum(AI_PROVIDERS);
 
+export const openAIReasoningEffortSchema = z.enum(["none", "low", "medium", "high", "xhigh", "max"]);
+export type OpenAIReasoningEffort = z.infer<typeof openAIReasoningEffortSchema>;
+
 export const AI_PROVIDER_DEFAULT_BASE_URLS: Record<AIProvider, string> = {
 	openai: "https://api.openai.com/v1",
 	anthropic: "https://api.anthropic.com/v1",

@@ -72,6 +72,7 @@ export const agentThread = pg.pgTable(
 		status: pg.text("status").notNull().default("active"),
 		// Per-thread "Review edits" toggle: when true, apply_resume_patch requires user approval.
 		reviewPatches: pg.boolean("review_patches").notNull().default(false),
+		reasoningEffort: pg.text("reasoning_effort").notNull().default("medium"),
 		activeRunId: pg.text("active_run_id"),
 		activeStreamId: pg.text("active_stream_id"),
 		activeRunStartedAt: pg.timestamp("active_run_started_at", { withTimezone: true }),
@@ -87,6 +88,10 @@ export const agentThread = pg.pgTable(
 	},
 	(t) => [
 		pg.index().on(t.userId, t.status, t.lastMessageAt.desc()),
+		pg.check(
+			"agent_threads_reasoning_effort_check",
+			sql`${t.reasoningEffort} in ('none', 'low', 'medium', 'high', 'xhigh', 'max')`,
+		),
 		pg.index().on(t.workingResumeId),
 		pg.index().on(t.aiProviderId),
 		// At most one active in-place thread per (user, working, source) resume; guards the

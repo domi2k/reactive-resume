@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { isDirectOpenAIProvider, supportsOpenAIWebSearch } from "./capabilities";
+import { getReasoningEfforts, isDirectOpenAIProvider, supportsOpenAIWebSearch } from "./capabilities";
 
 describe("AI provider capabilities", () => {
+	it("offers verified GPT-5.6 efforts only for official OpenAI models", () => {
+		for (const model of ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"]) {
+			expect(getReasoningEfforts({ provider: "openai", model })).toEqual([
+				"none",
+				"low",
+				"medium",
+				"high",
+				"xhigh",
+				"max",
+			]);
+			expect(getReasoningEfforts({ provider: "openai-compatible", model })).toEqual([]);
+		}
+		expect(getReasoningEfforts({ provider: "openai", model: "gpt-4o" })).toEqual([]);
+		expect(getReasoningEfforts({ provider: "openai", model: "custom-model" })).toEqual([]);
+	});
 	it("identifies direct OpenAI base URL configs", () => {
 		expect(isDirectOpenAIProvider({ provider: "openai", baseURL: "" })).toBe(true);
 		expect(isDirectOpenAIProvider({ provider: "openai", baseURL: "https://api.openai.com/v1/" })).toBe(true);

@@ -1,8 +1,8 @@
 import type { ApplyResumePatchInput } from "@reactive-resume/ai/tools/agent-tool-contracts";
+import type { OpenAIReasoningEffort } from "@reactive-resume/ai/types";
 import type { JsonPatchOperation } from "@reactive-resume/resume/patch";
 import type { Locale } from "@reactive-resume/utils/locale";
 import type { FilePart, ImagePart, ModelMessage, TextPart, UIMessage } from "ai";
-import type { getModel } from "../ai/service";
 import { ORPCError } from "@orpc/client";
 import { streamToEventIterator } from "@orpc/server";
 import {
@@ -15,12 +15,14 @@ import {
 	wrapLanguageModel,
 } from "ai";
 import { and, asc, count, desc, eq, gte, inArray, isNull, max, sql } from "drizzle-orm";
+import { aiProviderSchema, openAIReasoningEffortSchema } from "@reactive-resume/ai/types";
 import { db } from "@reactive-resume/db/client";
 import * as schema from "@reactive-resume/db/schema";
 import { defaultResumeData } from "@reactive-resume/schema/resume/default";
 import { generateId } from "@reactive-resume/utils/string";
+import { getReasoningEfforts } from "../ai/capabilities";
 import { assertAgentEnvironment, getAgentToolApprovalSecret } from "../ai/credentials";
-import { getAgentModel } from "../ai/service";
+import { getModel } from "../ai/service";
 import { aiProvidersService } from "../ai-providers/service";
 import { resumeService } from "../resume/service";
 import { getStorageService, inferContentType } from "../storage/service";
@@ -112,6 +114,7 @@ function toThreadSummary(row: AgentThreadRecord & { resumeName?: string | null; 
 		title: row.title,
 		status: row.status,
 		reviewPatches: row.reviewPatches,
+		reasoningEffort: openAIReasoningEffortSchema.parse(row.reasoningEffort ?? "medium"),
 		sourceResumeId: row.sourceResumeId,
 		workingResumeId: row.workingResumeId,
 		aiProviderId: row.aiProviderId,
@@ -457,6 +460,16 @@ async function getThread(input: { id: string; userId: string }) {
 	if (!thread) throw new ORPCError("NOT_FOUND");
 
 	return thread;
+}
+
+async function getThreadReasoningEfforts(thread: AgentThreadRecord) {
+	if (!thread.aiProviderId) return [];
+	const [provider] = await db
+		.select({ provider: schema.aiProvider.provider, model: schema.aiProvider.model })
+		.from(schema.aiProvider)
+		.where(and(eq(schema.aiProvider.id, thread.aiProviderId), eq(schema.aiProvider.userId, thread.userId)))
+		.limit(1);
+	return provider ? getReasoningEfforts({ ...provider, provider: aiProviderSchema.parse(provider.provider) }) : [];
 }
 
 async function getNextMessageSequence(threadId: string) {
@@ -897,6 +910,7 @@ const threadSummarySelection = {
 	title: schema.agentThread.title,
 	status: schema.agentThread.status,
 	reviewPatches: schema.agentThread.reviewPatches,
+	reasoningEffort: schema.agentThread.reasoningEffort,
 	activeRunId: schema.agentThread.activeRunId,
 	activeStreamId: schema.agentThread.activeStreamId,
 	activeRunStartedAt: schema.agentThread.activeRunStartedAt,
@@ -1054,6 +1068,7 @@ export const agentService = {
 
 			return {
 				thread: toThreadSummary(thread),
+				reasoningEfforts: await getThreadReasoningEfforts(thread),
 				messages: messages.map(toMessage),
 				actions: actions.map(toAction),
 				attachments: attachments.map(toAttachment),
@@ -1067,19 +1082,35 @@ export const agentService = {
 			};
 		},
 
-		update: async (input: { id: string; userId: string; reviewPatches: boolean }) => {
+		update: async (input: {
+			id: string;
+			userId: string;
+			reviewPatches?: boolean;
+			reasoningEffort?: OpenAIReasoningEffort;
+		}) => {
 			assertAgentEnvironment();
 
 			const thread = await getThread({ id: input.id, userId: input.userId });
 			// Approval behavior is captured when a run's agent is created; toggling mid-run would
 			// show "review on" while later patches from the same run still auto-apply.
 			if (thread.activeRunId && !isStaleAgentRun(thread)) {
-				throw new ORPCError("CONFLICT", { message: "Review settings cannot change while a run is active." });
+				throw new ORPCError("CONFLICT", { message: "Conversation settings cannot change while a run is active." });
+			}
+			if (
+				input.reasoningEffort !== undefined &&
+				!(await getThreadReasoningEfforts(thread)).includes(input.reasoningEffort)
+			) {
+				throw new ORPCError("BAD_REQUEST", {
+					message: "The selected provider/model does not support this reasoning effort.",
+				});
 			}
 
 			const [updated] = await db
 				.update(schema.agentThread)
-				.set({ reviewPatches: input.reviewPatches })
+				.set({
+					...(input.reviewPatches !== undefined ? { reviewPatches: input.reviewPatches } : {}),
+					...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
+				})
 				.where(and(eq(schema.agentThread.id, input.id), eq(schema.agentThread.userId, input.userId)))
 				.returning();
 
@@ -1293,11 +1324,14 @@ export const agentService = {
 						apiKey: runnableProvider.apiKey,
 						baseURL: runnableProvider.baseURL ?? "",
 					},
-					model: getAgentModel({
+					model: getModel({
 						provider: runnableProvider.provider,
 						model: runnableProvider.model,
 						apiKey: runnableProvider.apiKey,
 						baseURL: runnableProvider.baseURL ?? "",
+						...(getReasoningEfforts(runnableProvider).length
+							? { reasoningEffort: openAIReasoningEffortSchema.parse(thread.reasoningEffort ?? "medium") }
+							: {}),
 					}),
 				});
 

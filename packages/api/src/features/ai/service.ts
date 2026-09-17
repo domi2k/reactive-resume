@@ -1,4 +1,5 @@
-import type { AIProvider } from "@reactive-resume/ai/types";
+import type { OpenAILanguageModelResponsesOptions } from "@ai-sdk/openai";
+import type { AIProvider, OpenAIReasoningEffort } from "@reactive-resume/ai/types";
 import type { ResumeData } from "@reactive-resume/schema/resume/data";
 import type { ModelMessage, UIMessage } from "ai";
 import { inflateRawSync } from "node:zlib";
@@ -20,12 +21,14 @@ import {
 	APICallError,
 	convertToModelMessages,
 	createGateway,
+	defaultSettingsMiddleware,
 	generateText,
 	LoadAPIKeyError,
 	NoSuchModelError,
 	stepCountIs,
 	streamText,
 	tool,
+	wrapLanguageModel,
 } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import { match } from "ts-pattern";
@@ -46,7 +49,7 @@ import {
 } from "@reactive-resume/ai/tools/patch-proposal";
 import { AI_PROVIDER_DEFAULT_BASE_URLS, AI_PROVIDER_DISPLAY_NAMES, aiProviderSchema } from "@reactive-resume/ai/types";
 import { applyResumePatches } from "@reactive-resume/resume/patch";
-import { supportsProviderNativeWebSearch } from "./capabilities";
+import { getReasoningEfforts } from "./capabilities";
 import { resolveAiBaseUrl } from "./url-policy";
 
 const aiExtractionTemplate = buildAiExtractionTemplate();
@@ -85,6 +88,7 @@ type GetModelInput = {
 	model: string;
 	apiKey: string;
 	baseURL?: string;
+	reasoningEffort?: OpenAIReasoningEffort;
 };
 
 const MAX_AI_FILE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -127,9 +131,28 @@ const ZIP_DEFLATED_METHOD = 8;
 export function getModel(input: GetModelInput) {
 	const { provider, model, apiKey } = input;
 	const baseURL = resolveAiBaseUrl(input);
+	if (input.reasoningEffort !== undefined && !getReasoningEfforts(input).includes(input.reasoningEffort)) {
+		throw new Error(
+			`${AI_PROVIDER_DISPLAY_NAMES[provider]} model "${model}" does not support the selected reasoning effort.`,
+		);
+	}
 
 	return match(provider)
-		.with("openai", () => createOpenAI({ apiKey, baseURL }).chat(model))
+		.with("openai", () =>
+			wrapLanguageModel({
+				model: createOpenAI({ apiKey, baseURL }).responses(model),
+				middleware: defaultSettingsMiddleware({
+					settings: {
+						providerOptions: {
+							openai: {
+								reasoningEffort: input.reasoningEffort,
+								reasoningSummary: input.reasoningEffort === "none" ? null : "auto",
+							} satisfies OpenAILanguageModelResponsesOptions,
+						},
+					},
+				}),
+			}),
+		)
 		.with("anthropic", () => createAnthropic({ apiKey, baseURL }).languageModel(model))
 		.with("gemini", () => createGoogleGenerativeAI({ apiKey, baseURL }).languageModel(model))
 		.with("vercel-ai-gateway", () => createGateway({ apiKey, baseURL }).languageModel(model))
@@ -156,12 +179,6 @@ export function getModel(input: GetModelInput) {
 			return ollama.languageModel(model);
 		})
 		.exhaustive();
-}
-
-export function getAgentModel(input: GetModelInput) {
-	if (!supportsProviderNativeWebSearch(input)) return getModel(input);
-
-	return createOpenAI({ apiKey: input.apiKey, baseURL: resolveAiBaseUrl(input) }).responses(input.model);
 }
 
 const aiCredentialsSchema = z.object({
@@ -254,7 +271,9 @@ function describeTestConnectionFailure(input: TestConnectionInput, error: unknow
 		const status = error.statusCode;
 
 		if (status === 401 || status === 403) return `${provider} rejected the API key.`;
-		if (status === 404) return `${provider} has no model named "${input.model}", or the base URL is wrong.`;
+		if (status === 404) {
+			return `${provider} has no model named "${input.model}", or the base URL is wrong.${input.provider === "openai" ? " OpenAI uses the Responses API. For a service that only supports Chat Completions, select OpenAI Compatible instead." : ""}`;
+		}
 		if (status === 429) return `${provider} rate-limited the test. Wait a moment and try again.`;
 		if (status !== undefined && status >= 500) {
 			return `${provider} reported a server error (${status}). This is a problem on the provider's side.`;
@@ -283,8 +302,9 @@ export async function testConnection(input: TestConnectionInput): Promise<TestCo
 	try {
 		result = await generateText({
 			model,
-			maxOutputTokens: TEST_CONNECTION_MAX_OUTPUT_TOKENS,
-			temperature: 0,
+			// Responses counts internal reasoning against the output budget too.
+			maxOutputTokens: input.provider === "openai" ? 4096 : TEST_CONNECTION_MAX_OUTPUT_TOKENS,
+			...(input.provider === "openai" ? {} : { temperature: 0 }),
 			// A connection test must not silently multiply its own wait by retrying behind the user.
 			maxRetries: 0,
 			abortSignal: AbortSignal.timeout(TEST_CONNECTION_TIMEOUT_MS),
