@@ -9,6 +9,7 @@ vi.mock("@reactive-resume/db/schema", () => ({
 		userId: "agent_threads.user_id",
 		activeRunId: "agent_threads.active_run_id",
 		activeStreamId: "agent_threads.active_stream_id",
+		agentMode: "agent_threads.agent_mode",
 	},
 }));
 vi.mock("drizzle-orm", () => ({
@@ -46,12 +47,12 @@ function createRunStateDb(returningRows: unknown[] = []) {
 }
 
 describe("agent run state", () => {
-	it("claims an active run only when the thread still has no active run", async () => {
+	it("claims an active run only when the thread is idle and its mode is unchanged", async () => {
 		const db = createRunStateDb([{ id: "thread-1" }]);
 
 		await expect(
 			claimActiveAgentRun(
-				{ threadId: "thread-1", userId: "user-1", runId: "run-1", streamId: "stream-1" },
+				{ threadId: "thread-1", userId: "user-1", runId: "run-1", streamId: "stream-1", agentMode: "edit" },
 				db.database as never,
 			),
 		).resolves.toBe(true);
@@ -68,6 +69,7 @@ describe("agent run state", () => {
 				{ type: "eq", left: "agent_threads.id", right: "thread-1" },
 				{ type: "eq", left: "agent_threads.user_id", right: "user-1" },
 				{ type: "isNull", value: "agent_threads.active_run_id" },
+				{ type: "eq", left: "agent_threads.agent_mode", right: "edit" },
 			],
 		});
 	});
@@ -77,7 +79,7 @@ describe("agent run state", () => {
 
 		await expect(
 			claimActiveAgentRun(
-				{ threadId: "thread-1", userId: "user-1", runId: "run-1", streamId: "stream-1" },
+				{ threadId: "thread-1", userId: "user-1", runId: "run-1", streamId: "stream-1", agentMode: "edit" },
 				db.database as never,
 			),
 		).resolves.toBe(false);

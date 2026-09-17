@@ -1,5 +1,5 @@
 import type { ApplyResumePatchInput } from "@reactive-resume/ai/tools/agent-tool-contracts";
-import type { OpenAIReasoningEffort } from "@reactive-resume/ai/types";
+import type { AgentMode, AgentSettings } from "@reactive-resume/ai/types";
 import type { JsonPatchOperation } from "@reactive-resume/resume/patch";
 import type { Locale } from "@reactive-resume/utils/locale";
 import type { FilePart, ImagePart, ModelMessage, TextPart, UIMessage } from "ai";
@@ -15,7 +15,7 @@ import {
 	wrapLanguageModel,
 } from "ai";
 import { and, asc, count, desc, eq, gte, inArray, isNull, max, sql } from "drizzle-orm";
-import { aiProviderSchema, openAIReasoningEffortSchema } from "@reactive-resume/ai/types";
+import { agentModeSchema, aiProviderSchema, openAIReasoningEffortSchema } from "@reactive-resume/ai/types";
 import { db } from "@reactive-resume/db/client";
 import * as schema from "@reactive-resume/db/schema";
 import { defaultResumeData } from "@reactive-resume/schema/resume/default";
@@ -114,6 +114,8 @@ function toThreadSummary(row: AgentThreadRecord & { resumeName?: string | null; 
 		title: row.title,
 		status: row.status,
 		reviewPatches: row.reviewPatches,
+		agentMode: agentModeSchema.parse(row.agentMode ?? "analyze"),
+		customInstructions: row.customInstructions ?? null,
 		reasoningEffort: openAIReasoningEffortSchema.parse(row.reasoningEffort ?? "medium"),
 		sourceResumeId: row.sourceResumeId,
 		workingResumeId: row.workingResumeId,
@@ -790,6 +792,8 @@ function createAgent(input: {
 	resumeId: string;
 	draftRowId?: string;
 	requirePatchApproval?: boolean;
+	agentMode: AgentMode;
+	customInstructions: string | null;
 	provider: {
 		provider: Parameters<typeof getModel>[0]["provider"];
 		model: string;
@@ -824,7 +828,7 @@ function createAgent(input: {
 
 	const tools = buildAgentTools({
 		provider: input.provider,
-		options: { requirePatchApproval: !!input.requirePatchApproval },
+		options: { agentMode: input.agentMode, requirePatchApproval: !!input.requirePatchApproval },
 		handlers: {
 			readResume: timedToolHandler("read_resume", async () => {
 				const resume = await resumeService.getById({ id: input.resumeId, userId: input.userId });
@@ -868,7 +872,11 @@ function createAgent(input: {
 		},
 	});
 
-	const instructionsText = buildAgentInstructions({ hasProviderNativeSearch: "web_search" in tools });
+	const instructionsText = buildAgentInstructions({
+		hasProviderNativeSearch: "web_search" in tools,
+		agentMode: input.agentMode,
+		customInstructions: input.customInstructions,
+	});
 
 	return new ToolLoopAgent({
 		// Providers without native inputExamples support get them appended to the tool description.
@@ -910,6 +918,8 @@ const threadSummarySelection = {
 	title: schema.agentThread.title,
 	status: schema.agentThread.status,
 	reviewPatches: schema.agentThread.reviewPatches,
+	agentMode: schema.agentThread.agentMode,
+	customInstructions: schema.agentThread.customInstructions,
 	reasoningEffort: schema.agentThread.reasoningEffort,
 	activeRunId: schema.agentThread.activeRunId,
 	activeStreamId: schema.agentThread.activeStreamId,
@@ -1082,12 +1092,7 @@ export const agentService = {
 			};
 		},
 
-		update: async (input: {
-			id: string;
-			userId: string;
-			reviewPatches?: boolean;
-			reasoningEffort?: OpenAIReasoningEffort;
-		}) => {
+		update: async (input: { id: string; userId: string } & Partial<AgentSettings>) => {
 			assertAgentEnvironment();
 
 			const thread = await getThread({ id: input.id, userId: input.userId });
@@ -1108,13 +1113,26 @@ export const agentService = {
 			const [updated] = await db
 				.update(schema.agentThread)
 				.set({
+					...(input.agentMode !== undefined ? { agentMode: input.agentMode } : {}),
+					...(input.customInstructions !== undefined
+						? { customInstructions: input.customInstructions?.trim() || null }
+						: {}),
 					...(input.reviewPatches !== undefined ? { reviewPatches: input.reviewPatches } : {}),
 					...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
 				})
-				.where(and(eq(schema.agentThread.id, input.id), eq(schema.agentThread.userId, input.userId)))
+				.where(
+					and(
+						eq(schema.agentThread.id, input.id),
+						eq(schema.agentThread.userId, input.userId),
+						thread.activeRunId
+							? eq(schema.agentThread.activeRunId, thread.activeRunId)
+							: isNull(schema.agentThread.activeRunId),
+					),
+				)
 				.returning();
 
-			if (!updated) throw new ORPCError("NOT_FOUND");
+			if (!updated)
+				throw new ORPCError("CONFLICT", { message: "Conversation changed while saving settings. Try again." });
 
 			return toThreadSummary(updated);
 		},
@@ -1221,10 +1239,18 @@ export const agentService = {
 			const controller = new AbortController();
 			activeRunControllers.set(runId, controller);
 
-			const claimed = await claimActiveAgentRun({ threadId: input.threadId, userId: input.userId, runId, streamId });
+			const claimed = await claimActiveAgentRun({
+				threadId: input.threadId,
+				userId: input.userId,
+				runId,
+				streamId,
+				agentMode: thread.agentMode ?? "analyze",
+			});
 			if (!claimed) {
 				activeRunControllers.delete(runId);
-				throw new ORPCError("CONFLICT", { message: "This thread already has an active run." });
+				throw new ORPCError("CONFLICT", {
+					message: "Conversation mode changed or a run is already active. Try again.",
+				});
 			}
 
 			// Whole-run wall clock. Must abort with an AbortError (see abortReason) — never AbortSignal.timeout().
@@ -1318,6 +1344,8 @@ export const agentService = {
 					resumeId: thread.workingResumeId,
 					...(draftRowId ? { draftRowId } : {}),
 					requirePatchApproval: thread.reviewPatches,
+					agentMode: agentModeSchema.parse(thread.agentMode ?? "analyze"),
+					customInstructions: thread.customInstructions ?? null,
 					provider: {
 						provider: runnableProvider.provider,
 						model: runnableProvider.model,

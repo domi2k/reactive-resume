@@ -24,7 +24,7 @@ export function isStaleAgentRun(thread: StaleRunThreadFields, now = new Date()) 
 }
 
 export async function claimActiveAgentRun(
-	input: { threadId: string; userId: string; runId: string; streamId: string },
+	input: { threadId: string; userId: string; runId: string; streamId: string; agentMode: string },
 	database: AgentRunStateDb = db,
 ) {
 	const claimed = await database
@@ -35,6 +35,8 @@ export async function claimActiveAgentRun(
 				eq(schema.agentThread.id, input.threadId),
 				eq(schema.agentThread.userId, input.userId),
 				isNull(schema.agentThread.activeRunId),
+				// A settings update may have won after send read the thread. Never start with a stale mode.
+				eq(schema.agentThread.agentMode, input.agentMode),
 			),
 		)
 		.returning({ id: schema.agentThread.id });

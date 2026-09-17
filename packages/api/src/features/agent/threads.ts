@@ -1,5 +1,5 @@
 import z from "zod";
-import { openAIReasoningEffortSchema } from "@reactive-resume/ai/types";
+import { agentSettingsSchema } from "@reactive-resume/ai/types";
 import { protectedProcedure } from "../../context";
 import { mapAgentEnvironmentError } from "./routing";
 import { agentService } from "./service";
@@ -74,22 +74,18 @@ export const threadsRouter = {
 			summary: "Update agent thread settings",
 		})
 		.input(
-			z
-				.object({
-					id: z.string(),
-					reviewPatches: z.boolean().optional(),
-					reasoningEffort: openAIReasoningEffortSchema.optional(),
-				})
-				.refine(
-					(input) => input.reviewPatches !== undefined || input.reasoningEffort !== undefined,
-					"No settings supplied.",
-				),
+			agentSettingsSchema
+				.partial()
+				.extend({ id: z.string() })
+				.refine((input) => Object.keys(input).some((key) => key !== "id"), "No settings supplied."),
 		)
 		.use(mapAgentEnvironmentError)
 		.handler(({ context, input }) =>
 			agentService.threads.update({
 				id: input.id,
 				userId: context.user.id,
+				...(input.agentMode !== undefined ? { agentMode: input.agentMode } : {}),
+				...(input.customInstructions !== undefined ? { customInstructions: input.customInstructions } : {}),
 				...(input.reviewPatches !== undefined ? { reviewPatches: input.reviewPatches } : {}),
 				...(input.reasoningEffort !== undefined ? { reasoningEffort: input.reasoningEffort } : {}),
 			}),

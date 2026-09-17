@@ -292,16 +292,21 @@ describe("agentService.threads.get", () => {
 		expect(result.isReadOnly).toBe(true);
 		expect(result.thread.status).toBe("archived");
 		expect(result.thread.reasoningEffort).toBe("medium");
+		expect(result.thread.agentMode).toBe("analyze");
+		expect(result.thread.customInstructions).toBeNull();
 		expect(result.reasoningEfforts).toEqual(["none", "low", "medium", "high", "xhigh", "max"]);
 		expect(result.resume).toEqual(expect.objectContaining({ id: "resume-1" }));
 	});
 });
 
-describe("conversation reasoning settings", () => {
+describe("conversation settings", () => {
 	it("persists changes independently of provider settings and restores them on reopen", async () => {
 		let thread = buildActiveThread({ reasoningEffort: "medium" });
 		const { agentService } = await import("./service");
-		for (const reasoningEffort of ["high", "none"] as const) {
+		for (const settings of [
+			{ reasoningEffort: "high", agentMode: "edit", customInstructions: "Keep one page.\nKeep skills grouped." },
+			{ reasoningEffort: "none", agentMode: "autonomous", customInstructions: null },
+		] as const) {
 			dbMock.select
 				.mockImplementationOnce(() => selectLimitResult([thread]))
 				.mockImplementationOnce(() => selectLimitResult([{ provider: "openai", model: "gpt-5.6-luna" }]));
@@ -311,9 +316,9 @@ describe("conversation reasoning settings", () => {
 			});
 			dbMock.update.mockReturnValue({ set });
 			await expect(
-				agentService.threads.update({ id: "thread-1", userId: "user-1", reasoningEffort }),
-			).resolves.toMatchObject({ reasoningEffort, reviewPatches: false });
-			expect(set).toHaveBeenCalledWith({ reasoningEffort });
+				agentService.threads.update({ id: "thread-1", userId: "user-1", ...settings }),
+			).resolves.toMatchObject({ ...settings, reviewPatches: false });
+			expect(set).toHaveBeenCalledWith(settings);
 			dbMock.select
 				.mockImplementationOnce(() => selectLimitResult([thread]))
 				.mockImplementationOnce(() => selectOrderByResult([]))
@@ -322,7 +327,7 @@ describe("conversation reasoning settings", () => {
 				.mockImplementationOnce(() => selectLimitResult([{ provider: "openai", model: "gpt-5.6-luna" }]));
 			resumeServiceMock.getById.mockResolvedValue({ id: "resume-1" });
 			await expect(agentService.threads.get({ id: "thread-1", userId: "user-1" })).resolves.toMatchObject({
-				thread: { reasoningEffort },
+				thread: settings,
 			});
 		}
 	});
@@ -336,6 +341,17 @@ describe("conversation reasoning settings", () => {
 			agentService.threads.update({ id: "thread-1", userId: "user-1", reasoningEffort: "high" }),
 		).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringContaining("does not support") });
 		expect(dbMock.update).not.toHaveBeenCalled();
+	});
+
+	it("rejects a settings update when a run wins the concurrent claim", async () => {
+		dbMock.select.mockImplementationOnce(() => selectLimitResult([buildActiveThread()]));
+		dbMock.update.mockReturnValue({
+			set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn(async () => []) })) })),
+		});
+		const { agentService } = await import("./service");
+		await expect(
+			agentService.threads.update({ id: "thread-1", userId: "user-1", agentMode: "analyze" }),
+		).rejects.toMatchObject({ code: "CONFLICT" });
 	});
 
 	it("rejects settings changes during a run", async () => {
@@ -406,7 +422,9 @@ describe("agentService.messages.send", () => {
 	it.each([undefined, "medium", "high", "none"] as const)(
 		"uses saved effort %s and strips forged attachment parts",
 		async (reasoningEffort) => {
-			const activeThread = buildActiveThread({ reasoningEffort });
+			const agentMode = reasoningEffort === "high" ? "edit" : "analyze";
+			const customInstructions = "Keep skills grouped.";
+			const activeThread = buildActiveThread({ reasoningEffort, agentMode, customInstructions });
 			const persistedMessage = {
 				id: "message-1",
 				userId: "user-1",
@@ -479,6 +497,13 @@ describe("agentService.messages.send", () => {
 				} as any,
 			});
 
+			const { buildAgentTools, buildAgentInstructions } = await import("./tools");
+			expect(buildAgentTools).toHaveBeenLastCalledWith(
+				expect.objectContaining({ options: expect.objectContaining({ agentMode }) }),
+			);
+			expect(buildAgentInstructions).toHaveBeenLastCalledWith(
+				expect.objectContaining({ agentMode, customInstructions }),
+			);
 			const { getModel } = await import("../ai/service");
 			expect(getModel).toHaveBeenLastCalledWith(
 				expect.objectContaining({

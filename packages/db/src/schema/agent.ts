@@ -73,6 +73,8 @@ export const agentThread = pg.pgTable(
 		// Per-thread "Review edits" toggle: when true, apply_resume_patch requires user approval.
 		reviewPatches: pg.boolean("review_patches").notNull().default(false),
 		reasoningEffort: pg.text("reasoning_effort").notNull().default("medium"),
+		agentMode: pg.text("agent_mode").notNull().default("analyze"),
+		customInstructions: pg.text("custom_instructions"),
 		activeRunId: pg.text("active_run_id"),
 		activeStreamId: pg.text("active_stream_id"),
 		activeRunStartedAt: pg.timestamp("active_run_started_at", { withTimezone: true }),
@@ -88,6 +90,7 @@ export const agentThread = pg.pgTable(
 	},
 	(t) => [
 		pg.index().on(t.userId, t.status, t.lastMessageAt.desc()),
+		pg.check("agent_threads_agent_mode_check", sql`${t.agentMode} in ('analyze', 'edit', 'autonomous')`),
 		pg.check(
 			"agent_threads_reasoning_effort_check",
 			sql`${t.reasoningEffort} in ('none', 'low', 'medium', 'high', 'xhigh', 'max')`,

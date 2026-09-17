@@ -1,5 +1,5 @@
 import type { AgentUIMessage } from "@reactive-resume/ai/tools/agent-tool-contracts";
-import type { OpenAIReasoningEffort } from "@reactive-resume/ai/types";
+import type { AgentSettings, OpenAIReasoningEffort } from "@reactive-resume/ai/types";
 import type { UIMessage } from "ai";
 import type * as React from "react";
 import type { RouterOutput } from "@/libs/orpc/client";
@@ -37,7 +37,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { agentMessageMetadataSchema } from "@reactive-resume/ai/tools/agent-tool-contracts";
-import { openAIReasoningEffortSchema } from "@reactive-resume/ai/types";
 import {
 	Attachment,
 	AttachmentContent,
@@ -49,7 +48,6 @@ import { Bubble, BubbleContent } from "@reactive-resume/ui/components/bubble";
 import { Button } from "@reactive-resume/ui/components/button";
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -84,6 +82,7 @@ import { useConfirm } from "@/hooks/use-confirm";
 import { getOrpcErrorMessage } from "@/libs/error-message";
 import { client, orpc, streamClient } from "@/libs/orpc/client";
 import { attachmentIdsFromTransportBody, buildAgentChatSubmission } from "../-helpers/chat-attachments";
+import { AgentSettingsPopover } from "./agent-settings";
 import { OperationRow, PatchApprovalCard } from "./patch-approval-card";
 import { ToolPartCard } from "./tool-part-card";
 
@@ -141,14 +140,12 @@ type ChatMessageProps = {
 	actionsById: Map<string, AgentAction>;
 };
 
-export type AgentChatProps = {
+export type AgentChatProps = AgentSettings & {
 	threadId: string;
 	initialMessages: UIMessage[];
 	isReadOnly: boolean;
 	readOnlyReason: "archived" | "missing" | null;
 	threadStatus: string;
-	reviewPatches: boolean;
-	reasoningEffort: OpenAIReasoningEffort;
 	reasoningEfforts: OpenAIReasoningEffort[];
 	activeRunId: string | null;
 	actions: AgentAction[];
@@ -177,15 +174,13 @@ type AgentChatMessagesProps = {
 };
 
 type AgentChatHeaderProps = {
+	settings: AgentSettings;
+	settingsDisabled: boolean;
+	onSettingsChange: (settings: Partial<AgentSettings>) => void;
 	isArchived: boolean;
 	isArchivePending: boolean;
 	isDeletePending: boolean;
-	isUpdatePending: boolean;
-	isStreaming: boolean;
-	reviewPatches: boolean;
-	reasoningEffort: OpenAIReasoningEffort;
 	reasoningEfforts: OpenAIReasoningEffort[];
-	onReasoningEffortChange: (value: OpenAIReasoningEffort) => void;
 	threadTokenTotal: number;
 	onArchive: () => void;
 	onCopyConversation: () => void;
@@ -193,7 +188,6 @@ type AgentChatHeaderProps = {
 	onDelete: () => void;
 	onClose?: () => void;
 	onToggleResume?: () => void;
-	onToggleReviewPatches: (reviewPatches: boolean) => void;
 	onToggleThreads?: () => void;
 };
 
@@ -794,6 +788,8 @@ export function AgentChat({
 	readOnlyReason,
 	threadStatus,
 	reviewPatches,
+	agentMode,
+	customInstructions,
 	reasoningEffort,
 	reasoningEfforts,
 	activeRunId,
@@ -967,7 +963,14 @@ export function AgentChat({
 
 	const send = () => {
 		const text = input.trim();
-		if ((!text && pendingAttachments.length === 0) || isReadOnly || isStreaming || isUploading) return;
+		if (
+			(!text && pendingAttachments.length === 0) ||
+			isReadOnly ||
+			isStreaming ||
+			isUploading ||
+			updateThreadMutation.isPending
+		)
+			return;
 
 		clearError();
 		const submission = buildAgentChatSubmission(text, pendingAttachments);
@@ -1050,7 +1053,7 @@ export function AgentChat({
 		[addToolApprovalResponse],
 	);
 
-	const updateSettings = (settings: { reviewPatches?: boolean; reasoningEffort?: OpenAIReasoningEffort }) => {
+	const updateSettings = (settings: Partial<AgentSettings>) => {
 		updateThreadMutation.mutate(
 			{ id: threadId, ...settings },
 			{
@@ -1121,15 +1124,13 @@ export function AgentChat({
 	return (
 		<section className="flex h-full min-h-0 flex-col bg-background">
 			<AgentChatHeader
+				settings={{ agentMode, customInstructions, reviewPatches, reasoningEffort }}
+				settingsDisabled={isReadOnly || isStreaming || !!activeRunId || updateThreadMutation.isPending}
+				onSettingsChange={updateSettings}
 				isArchived={isArchived}
 				isArchivePending={archiveMutation.isPending}
 				isDeletePending={deleteMutation.isPending}
-				isUpdatePending={updateThreadMutation.isPending}
-				isStreaming={isStreaming}
-				reviewPatches={reviewPatches}
-				reasoningEffort={reasoningEffort}
 				reasoningEfforts={reasoningEfforts}
-				onReasoningEffortChange={(value) => updateSettings({ reasoningEffort: value })}
 				threadTokenTotal={threadTokenTotal}
 				onArchive={handleArchive}
 				onClose={onClose}
@@ -1137,7 +1138,6 @@ export function AgentChat({
 				onCopyConversationJson={copyConversationJson}
 				onDelete={() => void handleDelete()}
 				onToggleResume={onToggleResume}
-				onToggleReviewPatches={(value) => updateSettings({ reviewPatches: value })}
 				onToggleThreads={onToggleThreads}
 			/>
 
@@ -1270,15 +1270,13 @@ function AgentChatMessages({
 }
 
 function AgentChatHeader({
+	settings,
+	settingsDisabled,
+	onSettingsChange,
 	isArchived,
 	isArchivePending,
 	isDeletePending,
-	isUpdatePending,
-	isStreaming,
-	reviewPatches,
-	reasoningEffort,
 	reasoningEfforts,
-	onReasoningEffortChange,
 	threadTokenTotal,
 	onArchive,
 	onClose,
@@ -1286,7 +1284,6 @@ function AgentChatHeader({
 	onCopyConversationJson,
 	onDelete,
 	onToggleResume,
-	onToggleReviewPatches,
 	onToggleThreads,
 }: AgentChatHeaderProps) {
 	return (
@@ -1311,11 +1308,11 @@ function AgentChatHeader({
 				) : null}
 			</div>
 			<div className="flex items-center gap-1">
-				<AgentReasoningSelect
-					value={reasoningEffort}
-					options={reasoningEfforts}
-					disabled={isArchived || isStreaming || isUpdatePending}
-					onChange={onReasoningEffortChange}
+				<AgentSettingsPopover
+					settings={settings}
+					reasoningEfforts={reasoningEfforts}
+					disabled={settingsDisabled}
+					onChange={onSettingsChange}
 				/>
 				{onToggleResume ? (
 					<Button size="icon-sm" variant="ghost" onClick={onToggleResume}>
@@ -1350,18 +1347,6 @@ function AgentChatHeader({
 						<DropdownMenuSeparator />
 
 						{!isArchived ? (
-							<DropdownMenuCheckboxItem
-								checked={reviewPatches}
-								// Approval behavior is captured when a run starts; toggling mid-run would
-								// misrepresent what the streaming run actually does (server rejects it too).
-								disabled={isUpdatePending || isStreaming}
-								onCheckedChange={(checked) => onToggleReviewPatches(checked === true)}
-							>
-								<Trans>Review edits</Trans>
-							</DropdownMenuCheckboxItem>
-						) : null}
-
-						{!isArchived ? (
 							<DropdownMenuItem disabled={isArchivePending} onClick={onArchive}>
 								<ArchiveIcon />
 								<Trans>Archive</Trans>
@@ -1385,34 +1370,6 @@ function AgentChatHeader({
 				) : null}
 			</div>
 		</div>
-	);
-}
-
-type AgentReasoningSelectProps = {
-	value: OpenAIReasoningEffort;
-	options: OpenAIReasoningEffort[];
-	disabled: boolean;
-	onChange: (value: OpenAIReasoningEffort) => void;
-};
-
-function AgentReasoningSelect({ value, options, disabled, onChange }: AgentReasoningSelectProps) {
-	if (!options.length) return null;
-	return (
-		<label className="flex items-center gap-2 text-muted-foreground text-xs">
-			<Trans>Reasoning effort</Trans>
-			<select
-				className="rounded-md border bg-background p-1 text-foreground disabled:opacity-50"
-				value={value}
-				disabled={disabled}
-				onChange={(event) => onChange(openAIReasoningEffortSchema.parse(event.target.value))}
-			>
-				{options.map((effort) => (
-					<option key={effort} value={effort}>
-						{effort}
-					</option>
-				))}
-			</select>
-		</label>
 	);
 }
 

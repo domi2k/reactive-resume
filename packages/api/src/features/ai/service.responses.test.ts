@@ -96,6 +96,7 @@ describe("OpenAI Responses transport", () => {
 			const agent = new ToolLoopAgent({
 				model: getModel({ ...provider, reasoningEffort }),
 				tools: buildAgentTools({
+					options: { agentMode: "edit" },
 					provider,
 					handlers: { readResume: vi.fn(), readAttachment: vi.fn(), applyResumePatch: vi.fn() },
 				}),
@@ -113,6 +114,35 @@ describe("OpenAI Responses transport", () => {
 		},
 	);
 
+	it("never advertises or executes a patch in Analyze even if the model requests one", async () => {
+		let step = 0;
+		const requests: Array<{ tools: Array<{ name?: string }> }> = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn((_url: string, init: RequestInit) => {
+				requests.push(JSON.parse(String(init.body)));
+				return sse(events(step, step++ === 0 ? "apply_resume_patch" : undefined));
+			}),
+		);
+		const applyResumePatch = vi.fn();
+		const agent = new ToolLoopAgent({
+			model: getModel({ ...provider, reasoningEffort: "high" }),
+			tools: buildAgentTools({
+				provider,
+				handlers: { readResume: vi.fn(), readAttachment: vi.fn(), applyResumePatch },
+			}),
+		});
+		const result = await agent.stream({ prompt: "Review my resume" });
+		const chunks: UIMessageChunk[] = [];
+		for await (const chunk of result.toUIMessageStream()) chunks.push(chunk);
+		expect(requests.length).toBeGreaterThan(0);
+		expect(requests.every(({ tools }) => tools.every(({ name }) => name !== "apply_resume_patch"))).toBe(true);
+		expect(applyResumePatch).not.toHaveBeenCalled();
+		expect(chunks).toContainEqual(
+			expect.objectContaining({ type: "tool-input-error", toolName: "apply_resume_patch" }),
+		);
+	});
+
 	it("executes repeated application tools, returns paired outputs, and streams summaries separately", async () => {
 		let step = 0;
 		const requests: Array<{ url: string; body: { input: unknown[] } }> = [];
@@ -127,6 +157,7 @@ describe("OpenAI Responses transport", () => {
 		const agent = new ToolLoopAgent({
 			model: getModel({ ...provider, reasoningEffort: "high" }),
 			tools: buildAgentTools({
+				options: { agentMode: "edit" },
 				provider,
 				handlers: { readResume, readAttachment: vi.fn(), applyResumePatch: vi.fn() },
 			}),

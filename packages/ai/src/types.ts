@@ -26,6 +26,17 @@ export const aiProviderSchema = z.enum(AI_PROVIDERS);
 export const openAIReasoningEffortSchema = z.enum(["none", "low", "medium", "high", "xhigh", "max"]);
 export type OpenAIReasoningEffort = z.infer<typeof openAIReasoningEffortSchema>;
 
+export const agentModeSchema = z.enum(["analyze", "edit", "autonomous"]);
+export type AgentMode = z.infer<typeof agentModeSchema>;
+export const MAX_AGENT_CUSTOM_INSTRUCTIONS_LENGTH = 8000;
+export const agentSettingsSchema = z.object({
+	agentMode: agentModeSchema,
+	customInstructions: z.string().trim().max(MAX_AGENT_CUSTOM_INSTRUCTIONS_LENGTH).nullable(),
+	reviewPatches: z.boolean(),
+	reasoningEffort: openAIReasoningEffortSchema,
+});
+export type AgentSettings = z.infer<typeof agentSettingsSchema>;
+
 export const AI_PROVIDER_DEFAULT_BASE_URLS: Record<AIProvider, string> = {
 	openai: "https://api.openai.com/v1",
 	anthropic: "https://api.anthropic.com/v1",
