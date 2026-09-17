@@ -732,7 +732,7 @@ const ItemTitle = ({ children, website, field, bold = true }: ItemTitleProps) =>
 			{inlineWebsiteIcon && (
 				<Icon
 					name="arrow-square-out"
-					style={{ fontSize: metadata.typography.body.fontSize * 0.75, marginLeft: 2 }}
+					style={{ fontSize: metadata.typography.body.fontSize * 0.75, marginLeft: 2, transform: "translateY(-2pt)" }}
 					color={resolvedIcon.style?.color ?? "#888888"}
 					nodeKey={iconNodeKey}
 				/>
